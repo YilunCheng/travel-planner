@@ -1,0 +1,21 @@
+# personal data — trips/covers/raw text/index/curated tables stay on this machine;
+# only the two GENERATED airport lookup tables are tracked (regenerate: import/airport_tz.py)
+data/*
+!data/airport_tz.json
+!data/airport_geo.json
+
+# secrets — API keys
+config.local.json
+
+# transient caches (regenerable)
+cache/
+
+# dev notes whose examples reference the owner's real trips — kept local, never committed
+CLAUDE.md
+
+# python bytecode
+__pycache__/
+*.pyc
+
+# os
+.DS_Store
