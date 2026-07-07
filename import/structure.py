@@ -21,18 +21,25 @@ TIMEOUT = 240
 PROMPT = """You convert a traveler's raw itinerary text into strict JSON. Output ONLY a JSON object, no markdown fences, no commentary.
 
 Trip: {title}
-The trip takes place starting around {ym} (year-month from the trip's folder). The raw text was extracted from a document and may be messy (tables flattened, columns merged, OCR-ish). Reconstruct the day-by-day plan.
+The trip takes place starting around {ym} (year-month from the trip's folder). The raw text was extracted from a personal document (PDF/Word/Excel/notes export) and may be messy: tables flattened into lines, columns merged, OCR-ish artifacts, things out of order.
+
+People record trips in very different ways — read ANY style and reconstruct the day-by-day plan:
+- day-by-day tables or lists (dated, numbered "Day 1/2/3", weekday-labeled, or with no dates at all)
+- free-form prose / diary-style paragraphs describing the plan
+- a stack of booking confirmations (flights, hotels, trains, rental cars, tours) in any order
+- spreadsheet exports, bullet notes, copy-pasted emails, mixed languages, mixed 12h/24h time formats
+- itinerary mixed with non-itinerary material (packing lists, budgets, visa notes, contacts)
 
 Output schema:
-{{"days":[{{"date":"YYYY-MM-DD","label":"M/D","stay":"hotel/lodge/ship you sleep at that night, or empty","items":[{{"type":"flight|transfer|hotel|activity|meal|note","text":"...","time":"HH:MM 24h or null"}}]}}]}}
+{{"days":[{{"date":"YYYY-MM-DD","label":"M/D","stay":"hotel/lodge/ship you sleep at that night, or empty","items":[{{"type":"flight|train|transfer|cruise|hotel|activity|meal|note","text":"...","time":"HH:MM 24h or null"}}]}}]}}
 
 Rules:
-- One object per calendar day, in chronological order. Use the trip month {ym} as the basis: if the raw text has no explicit month (e.g. a column of day numbers 1,2,3…), assume the trip starts in {ym}. Roll into the next month/year as days advance.
-- "stay" = where they sleep that night (hotel/lodge/resort/cruise ship/camp). Do not also duplicate it as an item.
-- Classify each line: flight (has airline codes/airport pairs like JFK-CDG), transfer (train/drive/ferry/bus), meal (Lunch/Dinner/Breakfast/Bar reservations), activity (tours/sights), hotel (check-in notes), note (anything else).
-- Keep flight codes, times and "+1" next-day markers verbatim inside text. For flights set time to null (the text holds dep/arr). For meals/activities set time to the start time in 24h when present, else null.
-- Preserve native place spellings. Keep any Chinese text as-is.
-- If the text is only flight tickets or a packing list with no day structure, still produce the days you can infer.
+- One object per calendar day, in chronological order. Anchor dates by precedence: explicit dates in the text win; else follow day numbers / weekday sequences; else assume the trip starts in {ym} and advance one day at a time (roll into the next month/year as days advance). If the source is unordered (e.g. a pile of bookings), sort everything onto the right day.
+- "stay" = where they sleep that night (hotel/lodge/resort/cruise ship/camp/friend's place). Repeat it for each night of a multi-night stay. Do not also duplicate it as an item.
+- Classify each item with the closest type: flight (airline codes/flight numbers/airport pairs like JFK-CDG), train (rail journeys), transfer (drive/taxi/bus/shuttle/ferry between places), cruise (boat legs), hotel (check-in/out notes), meal (breakfast/lunch/dinner/bar/restaurant reservations), activity (tours, sights, hikes, shows, tickets), note (anything else worth keeping: confirmation numbers, reminders, freeform remarks). When unsure, prefer note over guessing.
+- Keep flight codes, times and "+1" next-day markers verbatim inside text. For flights set time to null (the text holds dep/arr). For other items set time to the start time in 24h when present, else null.
+- Preserve the traveler's original spelling and language — never translate or "correct" place names; keep any Chinese text as-is.
+- Drop pure noise (page headers, repeated table headers, page numbers), but keep genuinely useful loose info as note items on the day it belongs to. If the text has no day structure at all (only bookings or a flat list), still produce the best day-by-day plan you can infer.
 
 RAW TEXT:
 ---

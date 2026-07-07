@@ -2,13 +2,13 @@
 
 一个**完全本地、单用户**的旅行行程规划器，跑在自己的 Mac 上。用一个单文件网页 UI **逐日查看行程、浏览每趟的文档、就地编辑与拖拽排版（含地图、天气、航班实时信息）**；也能把 `~/Documents/Travel Plan/` 里的旧行程文档导入成结构化 JSON。`data/` 下的结构化 JSON 是 going-forward 的**唯一真源**——不再需要用 Apple Pages 编辑行程。
 
-> 无构建步骤、无包管理器、无必配的 key。架构 = 标准库 `python3` 的 `ThreadingHTTPServer` + 一个 `index.html`（原生 JS + 两个 CDN 库）。唯一的 LLM 是**可选**的本地 `claude` CLI——没有也能完整使用，见[「没有 Claude Code 会怎样」](#-没有-claude-code订阅会怎样)。
+> 无构建步骤、无包管理器。架构 = 标准库 `python3` 的 `ThreadingHTTPServer` + 一个 `index.html`（原生 JS + 两个 CDN 库）。唯一的 LLM 是**可选**的本地 `claude` CLI——没有也能完整使用，见[「没有 Claude Code 会怎样」](#-没有-claude-code订阅会怎样)。
 
 ## 🚀 上手指南
 
 ### 第 1 步 · 电脑端（Mac）
 
-**0. 要求**：macOS（自带 `python3` 即可）。不用装任何依赖包；下面的 key 与工具**全部可选**。
+**0. 要求**：macOS（自带 `python3` 即可），不用装任何依赖包。
 
 **1. 跑起来**
 
@@ -20,15 +20,7 @@ python3 server.py        # → http://localhost:8787
 - 改 `index.html` 或 `data/` 下的 JSON 只需**刷新浏览器**；**只有改 `server.py`（或 `import/common.py`）才需要重启**。
 - 端口固定 8787；默认只监听 `127.0.0.1`——本服务**无鉴权**，这是最安全的默认。
 
-**2. 建第一趟行程**
-
-首页 **➕ New trip** → 名称 / 开始日期 / 天数。打开行程后**处处可就地编辑**：
-
-- 双击标题/日期/文字直接改；悬停每行出现 ✎ 编辑、＋ 插入（行程项或两点间交通）、拖拽排序；`⌘Z` 撤销。
-- 右侧地图：**🔍 搜索地点**加入行程、**点地图落点**、每行 **📍 定位**。行程有了地点后，天气卡与逐日天气自动出现（keyless 的 Open-Meteo）。
-- 新建行程会在 `~/Documents/Travel Plan/` 下建一个 `YYYY:MM 标题` 文件夹；往 Documents 面板拖文件就归档进去（想换目录：环境变量 `TRAVEL_DIR`）。
-
-**3. 配 key（可选，建议配 Google）**——项目根目录建 `config.local.json`（已 gitignore，永不入库）：
+**2. 配 key**——地图、路线、地点详情这些核心体验建立在 Google Maps 上，**先把 key 配好再往下走**。项目根目录建 `config.local.json`（已 gitignore，永不入库）：
 
 ```json
 { "googleMapsApiKey": "AIza…", "aeroDataBoxKey": "…" }
@@ -36,21 +28,28 @@ python3 server.py        # → http://localhost:8787
 
 | Key | 打开的能力 | 不配时的降级 |
 |---|---|---|
-| `googleMapsApiKey` | Google 地图、富地点详情卡、驾车/步行/公交路线与用时 | Leaflet + OSM 地图、OSRM 驾车用时——功能齐全，少了地点卡与公交 |
-| `aeroDataBoxKey`（RapidAPI） | 航班悬停出实时状态/航站楼/登机口/机型 | 离线解析卡（航线/时刻/航司照常显示） |
+| `googleMapsApiKey` | Google 地图、富地点详情卡、驾车/步行/公交路线与用时 | Leaflet + OSM 地图、OSRM 驾车用时——能用，但没有地点卡与公交 |
+| `aeroDataBoxKey`（RapidAPI，可选） | 航班悬停出实时状态/航站楼/登机口/机型 | 离线解析卡（航线/时刻/航司照常显示） |
 
 Google key 在 Cloud Console 启用下文 [Google Maps Platform APIs](#%EF%B8%8F-google-maps-platform-apis逐个拆开) 表里的 **6 个 API**（个人用量全部在免费额度内，实际 ≈ $0/月），并把 referrer 白名单加上 `http://localhost:8787/*`。
+
+**3. 建第一趟行程**
+
+首页 **➕ New trip** → 名称 / 开始日期 / 天数。打开行程后**处处可就地编辑**：
+
+- 双击标题/日期/文字直接改；悬停每行出现 ✎ 编辑、＋ 插入（行程项或两点间交通）、拖拽排序；`⌘Z` 撤销。
+- 右侧地图：**🔍 搜索地点**加入行程、**点地图落点**、每行 **📍 定位**。行程有了地点后，天气卡与逐日天气自动出现（keyless 的 Open-Meteo）。
+- 新建行程会在 `~/Documents/Travel Plan/` 下建一个 `YYYY:MM 标题` 文件夹；往 Documents 面板拖文件就归档进去（想换目录：环境变量 `TRAVEL_DIR`）。
 
 **4. 装 Claude Code CLI（可选）**——已安装并登录过 [`claude`](https://claude.com/claude-code) 的话，「🗺 生成地图」「导入老文档的 LLM 清洗」「🏞 换封面的地标提名」「✨ AI 天气摘要」即开即用（直接复用你的登录态，**无需 API key、无单独计费**）。默认从 PATH 找 `claude`，可用环境变量 `CLAUDE_BIN`（二进制路径）/ `CLAUDE_MODEL`（默认 `claude-opus-4-8`）覆盖。没有它的差异见下一大节。
 
 **5. 导入已有行程文档（可选）**——旧行程按 `YYYY:MM 标题` 命名放进 `~/Documents/Travel Plan/`（注意是英文冒号 `:`，Finder 会显示成 `/`），然后：
 
 ```bash
-brew install pandoc poppler        # 解析 .pages 导出与 pdf 所需（只在导入时用）
+brew install poppler               # pdf → 文本所需（docx/xlsx 用系统自带能力解析，无需安装）
 python3 import/scan.py             # 建库：元数据 + 文档清单 + 封面占位
-python3 import/extract_pages.py    # .pages 行程表 → days[]（确定性、无 LLM；需装 Pages.app，首次弹一次自动化授权）
-python3 import/docparse.py         # 老 pdf/docx/xlsx → 原文文本
-python3 import/structure.py --all-raw   # 原文 → days[]（需要 claude）
+python3 import/docparse.py         # pdf/docx/xlsx → 原文文本
+python3 import/structure.py --all-raw   # 原文 → 逐日行程（需要 claude；不挑记录方式——表格、日记体、订票确认件的堆叠都能读）
 python3 import/geocode.py --all    # 行程文字 → 地图地点（claude 提查询 + 免费 Nominatim 解析）
 python3 import/covers.py --all     # 目的地封面照（Wikipedia/Commons，免费）
 ```
@@ -124,7 +123,7 @@ claude -p <prompt> --model $CLAUDE_MODEL --effort low \
 
 | # | 位置（prompt） | 何时跑 | claude 干什么 | 下游（非 LLM） |
 |---|---|---|---|---|
-| 1 | `structure.py`（`PROMPT`） | **非 `.pages` 老行程**（PDF/DOCX/XLSX）在 `docparse.py` 出原文后；`structure.py --all-raw` 批处理 | 把最多 14k 字脏文本（拍平的表格/OCR）重建成 `days[]` JSON：逐行分类（flight/transfer/hotel/activity/meal/note）、航班码与时刻与 `+1` 原样保留、保留原文拼写（含中文）、按月份推日期 | 直接写回 `data/trips/<id>.json` |
+| 1 | `structure.py`（`PROMPT`） | **导入老行程**（PDF/DOCX/XLSX）在 `docparse.py` 出原文后；`structure.py --all-raw` 批处理 | 把最多 14k 字脏文本重建成 `days[]` JSON——**不挑记录方式**（逐日表格、日记体散文、订票确认件堆叠、拍平的表格导出、混排语言/时间格式都能读）：逐项分类（flight/train/transfer/cruise/hotel/activity/meal/note）、航班码与时刻与 `+1` 原样保留、保留原文拼写（含中文）、日期按「显式日期 > Day N/星期序列 > 文件夹月份推算」锚定 | 直接写回 `data/trips/<id>.json` |
 | 2 | `geocode.py`（`EXTRACT_PROMPT`） | 生成地图：`geocode.py` / UI「🗺 生成地图」/ `POST /api/geocode` | 从每天文字挑出真实地点，并**用世界知识把名字补全成 OSM 能搜到的形式**（`Central` → `Central Restaurante, Lima, Peru`；`Goðafoss` → `Goðafoss, Iceland`），跳过机场码与 free day，≤40 个 | 清洗后的 `query` 交 **Nominatim** 查经纬度 |
 | 3 | `covers.py`（`LIST_PROMPT` / `PROMPT`） | 取封面/换图：`covers.py` / UI「🏞 Change photo」/ `POST /api/cover/auto` | 为目的地命名 **N 个不同的标志性、上镜地标**（Wikipedia 条目名，最具代表性优先，换图时能在不同地点间切）；另有批量版一次映射多趟。人工策展的 `data/cover_landmarks.json` 优先，claude 只补该表没覆盖的 | 地标名交 **Wikipedia / Commons** 抓首图 |
 | 4 | `server.py`（`_wx_summary_prompt`） | **浏览时**：天气卡头部 ✨ 悬停 → `POST /api/weather/summary` | 按该行程的气候卡（各地温度/雨天数）+ 活动构成，写 2–3 句**打包/注意事项建议**（纯文本） | 按 prompt 哈希缓存到 `cache/wx_summary.json`（天气/行程变了才重新生成） |
