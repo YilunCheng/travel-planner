@@ -346,6 +346,7 @@ def delete_trip(trip_id):
         os.path.join(COVERS_DIR, trip_id + ".jpg"),
         os.path.join(COVERS_DIR, trip_id + ".prev.jpg"),   # legacy single-level revert backup
         os.path.join(RAW_DIR, trip_id + ".txt"),
+        os.path.join(DATA_DIR, "chat", trip_id + ".json"),  # the trip's synced chat transcript
     ]
     if os.path.isdir(COVERS_DIR):                           # every cover-history file: covers/<id>.h<n>.jpg
         candidates += [os.path.join(COVERS_DIR, fn) for fn in os.listdir(COVERS_DIR)

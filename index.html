@@ -1273,8 +1273,15 @@ function chatFillSelects(){
   m.onchange=()=>setChatPref("chatModel",m.value);
   e.onchange=()=>setChatPref("chatEffort",e.value);
 }
+/* History is SERVER-SIDE per trip (data/chat/<id>.json via /api/chat/history) so the SAME conversation
+   shows on the Mac and the phone. localStorage is only a local cache — the panel opens instantly and
+   still works if the server is briefly unreachable; chatSyncFromServer() reconciles (server wins), with
+   a ONE-TIME lift of any pre-existing local history up to the server so nothing is lost on upgrade. */
 function chatKeyFor(id){return "tripchat:"+id;}
-function chatHist(){                             // the OPEN trip's history (lazy-loaded; reloads on trip switch)
+function chatMigKey(id){return "tripchatMig:"+id;}
+function chatMigrated(id){try{return localStorage.getItem(chatMigKey(id))==="1";}catch(e){return true;}}
+function chatMarkMigrated(id){try{localStorage.setItem(chatMigKey(id),"1");}catch(e){}}
+function chatHist(){                             // the OPEN trip's history (instant from cache; chatSyncFromServer refreshes)
   const id=CUR&&CUR.id;if(!id)return [];
   if(_chatFor!==id||!_chatHist){
     if(CHATABORT){try{CHATABORT.abort();}catch(e){}}   // switching trips kills any in-flight stream
@@ -1284,15 +1291,37 @@ function chatHist(){                             // the OPEN trip's history (laz
   }
   return _chatHist;
 }
-function saveChatHist(id,h){                     // cap: last 40 messages, 20k chars each — plenty for a trip discussion
+function chatCacheSave(id,h){                     // local cache: last 40 messages, 20k chars each
   try{localStorage.setItem(chatKeyFor(id),JSON.stringify(h.slice(-40).map(m=>({role:m.role,content:String(m.content).slice(0,20000),err:m.err||undefined}))));}catch(e){}
+}
+async function chatPushToServer(id,h){            // persist the transcript so other devices see it (err bubbles are transient → not stored)
+  if(!id)return;
+  const messages=(h||[]).filter(m=>!m.err).map(m=>({role:m.role,content:String(m.content).slice(0,20000)}));
+  try{
+    const r=await fetch("/api/chat/history",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id,messages})}).then(x=>x.json());
+    if(r&&r.ok)chatMarkMigrated(id);            // a successful write (incl. an empty clear) means this device is in sync
+  }catch(e){}                                    // offline → the local cache still holds it; a later exchange re-pushes
+}
+async function chatSyncFromServer(id){           // pull the server copy (source of truth) — called on open + trip switch
+  if(!id)return;
+  let r;try{r=await fetch("/api/chat/history?id="+encodeURIComponent(id)).then(x=>x.json());}catch(e){return;}   // offline → keep the cache
+  if(!r||!r.ok||_chatFor!==id||CHATBUSY)return; // trip switched away, or a stream is mid-flight → don't clobber
+  const server=Array.isArray(r.messages)?r.messages:[];
+  const local=_chatHist||[];
+  if(server.length){                             // server has history → adopt it everywhere
+    _chatHist=server;chatCacheSave(id,server);chatMarkMigrated(id);renderChatMsgs();
+  }else if(!chatMigrated(id)&&local.length){     // server empty & never synced → lift this device's existing history up (once)
+    chatPushToServer(id,local);                  // marks migrated on success; leaves local as-is meanwhile
+  }else if(chatMigrated(id)&&local.filter(m=>!m.err).length){   // already synced but server now empty → it was cleared elsewhere
+    _chatHist=[];chatCacheSave(id,[]);renderChatMsgs();
+  }
 }
 function updateChatFab(){
   const f=document.getElementById("chatfab");if(!f)return;
   const show=!PRINTMODE&&CHATOK&&/^#\/trip\//.test(location.hash)&&!!CUR;   // any open trip — an unstructured one chats over its raw text
   f.classList.toggle("show",!!show);
   if(!show&&document.body.classList.contains("chatopen"))closeChat();
-  else if(show&&document.body.classList.contains("chatopen")&&CUR&&_chatFor!==CUR.id)renderChatMsgs();   // panel left open across a trip switch → show the new trip's history
+  else if(show&&document.body.classList.contains("chatopen")&&CUR&&_chatFor!==CUR.id){renderChatMsgs();chatSyncFromServer(CUR.id);}   // panel left open across a trip switch → show the new trip's history (+ pull its server copy)
   f.textContent=document.body.classList.contains("chatopen")?"✕":"💬";
 }
 function openChat(){
@@ -1300,6 +1329,7 @@ function openChat(){
   chatFillSelects();
   document.body.classList.add("chatopen");
   renderChatMsgs();updateChatFab();
+  chatSyncFromServer(CUR.id);   // pull the latest transcript (edits made on another device)
   if(!IS_TOUCH)setTimeout(()=>{const i=$("#chatinput");if(i)i.focus();},60);   // touch: don't pop the keyboard until the user taps the field
 }
 function closeChat(){document.body.classList.remove("chatopen");updateChatFab();}
@@ -1307,7 +1337,8 @@ function toggleChat(){document.body.classList.contains("chatopen")?closeChat():o
 function chatClear(){
   const id=CUR&&CUR.id;if(!id)return;
   if(CHATABORT){try{CHATABORT.abort();}catch(e){}}
-  _chatHist=[];_chatFor=id;saveChatHist(id,[]);renderChatMsgs();
+  _chatHist=[];_chatFor=id;chatCacheSave(id,[]);chatMarkMigrated(id);renderChatMsgs();
+  chatPushToServer(id,[]);   // empty ⇒ clears the server file too, so other devices reflect the clear
 }
 function chatMd(s){                              // minimal markdown for assistant bubbles — escape FIRST, never raw HTML
   let h=esc(String(s==null?"":s));
@@ -1387,7 +1418,7 @@ async function chatSend(){
   ta.value="";autoGrow(ta);
   const hist=chatHist();
   hist.push({role:"user",content:q});
-  saveChatHist(CUR.id,hist);
+  chatCacheSave(CUR.id,hist);
   await chatRun(hist);
 }
 async function chatRun(hist){
@@ -1421,7 +1452,8 @@ async function chatRun(hist){
   CHATBUSY=false;CHATABORT=null;
   if(acc)hist.push({role:"assistant",content:acc});
   if(err)hist.push({role:"assistant",content:"⚠ "+err,err:true});   // err entries render red and are NOT resent to claude
-  saveChatHist(forId,hist);
+  chatCacheSave(forId,hist);
+  chatPushToServer(forId,hist);   // sync the completed exchange so the phone/Mac share it
   if(CUR&&CUR.id===forId)renderChatMsgs();
 }
 

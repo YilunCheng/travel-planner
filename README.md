@@ -39,7 +39,7 @@ Google key 在 Cloud Console 启用下文 [Google Maps Platform APIs](#%EF%B8%8F
 
 - 双击标题/日期/文字直接改；悬停每行出现 ✎ 编辑、＋ 插入（行程项或两点间交通）、拖拽排序；`⌘Z` 撤销。
 - 右侧地图：**🔍 搜索地点**加入行程、**点地图落点**、每行 **📍 定位**。行程有了地点后，天气卡与逐日天气自动出现（keyless 的 Open-Meteo）。
-- 右下角 **💬 聊天球**（需第 4 步的 `claude` CLI）：打开一个和 Claude 讨论这趟行程的聊天框——节奏怎么排、带什么、哪里要提前订都能问；**自动附上这趟行程的全部上下文**（逐日行程、住宿交通、日期与天气/季节、文档清单），聊天框内还能**选模型和 effort**。只读顾问：聊天不会改动你的行程。
+- 右下角 **💬 聊天球**（需第 4 步的 `claude` CLI）：打开一个和 Claude 讨论这趟行程的聊天框——节奏怎么排、带什么、哪里要提前订都能问；**自动附上这趟行程的全部上下文**（逐日行程、住宿交通、日期与天气/季节、文档清单），聊天框内还能**选模型和 effort**。只读顾问：聊天不会改动你的行程。**聊天记录按行程存在服务器端（`data/chat/`，随个人数据 gitignore），电脑和手机看到的是同一份对话**（模型/effort 的选择仍是各设备本地记忆）。
 - 新建行程会在 `~/Documents/Travel Plan/` 下建一个 `YYYY:MM 标题` 文件夹；往 Documents 面板拖文件就归档进去（想换目录：环境变量 `TRAVEL_DIR`）。
 
 **4. 装 Claude Code CLI（可选）**——已安装并登录过 [`claude`](https://claude.com/claude-code) 的话，「🗺 生成地图」「导入老文档的 LLM 清洗」「🏞 换封面的地标提名」「✨ AI 天气摘要」「💬 行程聊天」即开即用（直接复用你的登录态，**无需 API key、无单独计费**）。默认从 PATH 找 `claude`，可用环境变量 `CLAUDE_BIN`（二进制路径）/ `CLAUDE_MODEL`（默认 `claude-opus-4-8`）覆盖。没有它的差异见下一大节。
@@ -130,7 +130,7 @@ claude -p <prompt> --model $CLAUDE_MODEL --effort low \
 | 2 | `geocode.py`（`EXTRACT_PROMPT`） | 生成地图：`geocode.py` / UI「🗺 生成地图」/ `POST /api/geocode` | 从每天文字挑出真实地点，并**用世界知识把名字补全成 OSM 能搜到的形式**（`Central` → `Central Restaurante, Lima, Peru`；`Goðafoss` → `Goðafoss, Iceland`），跳过机场码与 free day，≤40 个 | 清洗后的 `query` 交 **Nominatim** 查经纬度 |
 | 3 | `covers.py`（`LIST_PROMPT` / `PROMPT`） | 取封面/换图：`covers.py` / UI「🏞 Change photo」/ `POST /api/cover/auto` | 为目的地命名 **N 个不同的标志性、上镜地标**（Wikipedia 条目名，最具代表性优先，换图时能在不同地点间切）；另有批量版一次映射多趟。人工策展的 `data/cover_landmarks.json` 优先，claude 只补该表没覆盖的 | 地标名交 **Wikipedia / Commons** 抓首图 |
 | 4 | `server.py`（`_wx_summary_prompt`） | **浏览时**：天气卡头部 ✨ 悬停 → `POST /api/weather/summary` | 按该行程的气候卡（各地温度/雨天数）+ 活动构成，写 2–3 句**打包/注意事项建议**（纯文本） | 按 prompt 哈希缓存到 `cache/wx_summary.json`（天气/行程变了才重新生成） |
-| 5 | `server.py`（`CHAT_PREAMBLE`） | **浏览时**：行程页右下 **💬** → `POST /api/chat` | 以自动附上的行程上下文（逐日行程/住宿/交通、气候卡、逐日预报、文档清单；未结构化行程用原文）陪你**讨论这趟行程**——节奏、打包、美食、订位建议…；模型与 effort 在聊天框里选 | 流式回前端；**只读**（从不改行程）、不缓存 |
+| 5 | `server.py`（`CHAT_PREAMBLE`） | **浏览时**：行程页右下 **💬** → `POST /api/chat` | 以自动附上的行程上下文（逐日行程/住宿/交通、气候卡、逐日预报、文档清单；未结构化行程用原文）陪你**讨论这趟行程**——节奏、打包、美食、订位建议…；模型与 effort 在聊天框里选 | 流式回前端；**只读**（从不改行程）；每条消息实时生成、不做响应缓存，但对话记录按行程存 `data/chat/`（跨设备同步，见 `/api/chat/history`） |
 
 **要点**：
 - `.pages` 行程**不用** claude——`extract_pages.py` 确定性地解析表格（claude 只是非 `.pages` 脏行程的清洗兜底）。

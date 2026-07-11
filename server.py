@@ -543,6 +543,21 @@ CHAT_PREAMBLE = (
 )
 
 
+CHAT_DIR = os.path.join(C.DATA_DIR, "chat")   # per-trip transcripts so the phone & Mac share one history (personal data → under data/, gitignored)
+
+
+def chat_history_path(tid):
+    """data/chat/<tid>.json, gated to a DIRECT child of CHAT_DIR — None for an unsafe id. is_safe_trip_id
+    alone isn't enough here: it gates TRIPS_DIR, so a `../trips/x` id passes it yet the joined chat path
+    would escape data/chat back into data/trips and clobber a trip file. So gate the real path too."""
+    if not C.is_safe_trip_id(tid):
+        return None
+    p = os.path.join(CHAT_DIR, tid + ".json")
+    if os.path.dirname(os.path.realpath(p)) != os.path.realpath(CHAT_DIR):
+        return None
+    return p
+
+
 def _chat_prompt(body, trip):
     """One self-contained prompt per message: preamble + the client-built trip context + the transcript.
     Stateless by design (no CLI session to manage); the context is rebuilt by the client each message, so
@@ -647,6 +662,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.flight_info(parse_qs(p.query))
         if route == "/api/weather":
             return self.weather_info(parse_qs(p.query))
+        if route == "/api/chat/history":
+            return self.get_chat_history(parse_qs(p.query))
         # keep machinery / secrets private
         if route.startswith("/import") or route.startswith("/cache") or route == "/config.local.json":
             return self.send_error(404)
@@ -962,6 +979,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.weather_summary()
             if route == "/api/chat":
                 return self.chat()
+            if route == "/api/chat/history":
+                return self.save_chat_history()
             if route == "/api/cover":
                 return self.upload_cover()
             if route == "/api/cover/auto":
@@ -1346,6 +1365,54 @@ class Handler(SimpleHTTPRequestHandler):
         finally:
             watchdog.cancel()
             _kill()
+
+    def get_chat_history(self, qs):
+        """GET /api/chat/history?id=<trip> → {ok, messages:[{role,content,err?}…], updatedAt}. The stored
+        transcript for a trip, so the SAME conversation shows on every device (Mac + phone). Empty list
+        when a trip has no saved chat yet."""
+        path = chat_history_path((qs.get("id") or [""])[0])
+        if not path:
+            return self._json(400, {"error": "bad id"})
+        data = C.read_json(path, None)
+        if isinstance(data, dict) and isinstance(data.get("messages"), list):
+            return self._json(200, {"ok": True, "messages": data["messages"], "updatedAt": data.get("updatedAt")})
+        return self._json(200, {"ok": True, "messages": [], "updatedAt": None})
+
+    def save_chat_history(self):
+        """POST /api/chat/history {id, messages:[{role,content,err?}…]} → persist a trip's transcript to
+        data/chat/<id>.json so it syncs across devices. Empty messages CLEARS it (removes the file). The
+        content is sanitized + capped (60 msgs × 20k chars); this stores ONLY the transcript — the chat
+        itself still streams statelessly through /api/chat."""
+        b = self._body()
+        path = chat_history_path((b.get("id") or "").strip())
+        if not path:
+            return self._json(400, {"error": "bad id"})
+        tid = (b.get("id") or "").strip()
+        msgs = b.get("messages")
+        if not isinstance(msgs, list):
+            return self._json(400, {"error": "missing messages"})
+        clean = []
+        for m in msgs[-60:]:
+            if not isinstance(m, dict):
+                continue
+            role = "user" if m.get("role") == "user" else "assistant"
+            content = str(m.get("content") or "")[:20000]
+            if not content:
+                continue
+            e = {"role": role, "content": content}
+            if m.get("err"):
+                e["err"] = True
+            clean.append(e)
+        if not clean:                                        # empty ⇒ clear: remove the file (realpath-gated to data/chat)
+            try:
+                rp = os.path.realpath(path)
+                if rp.startswith(os.path.realpath(CHAT_DIR) + os.sep) and os.path.isfile(rp):
+                    os.remove(rp)
+            except OSError:
+                pass
+            return self._json(200, {"ok": True, "cleared": True})
+        C.write_json(path, {"id": tid, "messages": clean, "updatedAt": int(time.time() * 1000)})
+        return self._json(200, {"ok": True, "count": len(clean)})
 
     def upload_cover(self):
         """Body = raw image bytes; ?id=<trip>. Convert+resize to data/covers/<id>.jpg."""
