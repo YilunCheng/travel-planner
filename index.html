@@ -465,7 +465,7 @@ header.top{position:sticky;top:0;z-index:30;backdrop-filter:saturate(180%) blur(
   @page { margin: 13mm 12mm; }
   html, body { background:#fff !important; }
   body { -webkit-print-color-adjust:exact; print-color-adjust:exact; }   /* keep the type colour-bars + day tints + weather */
-  header.top, .triptabs, .tripmap-hint, .toast, #fltip, #wxtip, #placedetail,
+  header.top, .triptabs, .tripmap-hint, .toast, #fltip, #wxtip, #placedetail, #chatfab, .chatpanel,
   .modal-ov, #addplaceform, #mapsearchresults, .docdrop, .docpanel { display:none !important; }
   .detail .aside, .mappane { display:none !important; }                  /* the live (interactive) map is screen-only — print uses #pdfmap */
   .pdfmap[src]{ display:block !important; width:100%; max-height:116mm; object-fit:contain; margin:6mm 0 0; border:1px solid #e5e7eb; border-radius:6px; break-inside:avoid; }
@@ -496,6 +496,35 @@ header.top{position:sticky;top:0;z-index:30;backdrop-filter:saturate(180%) blur(
 .legmove .mvbody{ color:var(--muted); }                          /* drive/transfer pill -> neutral */
 .legmove:hover .mvbody{ color:var(--ink); border-color:var(--line); background:var(--panel); }
 .legmove .mvline{ border-left-color:var(--muted); opacity:.5; }
+
+/* ===================== 💬 TRIP CHAT (discuss the open trip with claude) ===================== */
+#chatfab{display:none;position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:81;width:54px;height:54px;border-radius:50%;background:var(--accent);color:#fff;font-size:22px;align-items:center;justify-content:center;border:none;box-shadow:0 6px 22px rgba(0,0,0,.32);transition:transform .15s;padding:0}
+#chatfab.show{display:flex}
+#chatfab:active{transform:scale(.92)}
+.chatpanel{display:none;position:fixed;right:16px;bottom:calc(80px + env(safe-area-inset-bottom));z-index:82;width:400px;max-width:calc(100vw - 32px);height:min(600px,calc(100vh - 110px));flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.4);overflow:hidden}
+body.chatopen .chatpanel{display:flex}
+.chat-hdr{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line);flex:0 0 auto}
+.chat-ttl{font-weight:700;font-size:13px;margin-right:auto;white-space:nowrap}
+.chat-sel{font-size:11.5px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--muted);padding:2px 3px;max-width:110px;min-width:0;flex:0 1 auto}
+.chat-hdr .iconbtn{width:26px;height:24px;font-size:14px}
+.chat-msgs{flex:1;overflow-y:auto;padding:12px 12px 6px;display:flex;flex-direction:column;gap:9px;overscroll-behavior:contain}
+.cmsg{max-width:88%;border-radius:12px;padding:7px 11px;font-size:13.5px;line-height:1.5}
+.cmsg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.cmsg.asst{align-self:flex-start;background:var(--bg);border:1px solid var(--line);border-bottom-left-radius:4px}
+.cmsg.err .cmsg-body{color:#c0392b}
+@media (prefers-color-scheme:dark){.cmsg.err .cmsg-body{color:#ff8a80}}
+.cmsg-body{white-space:pre-wrap;word-break:break-word}
+.cmsg-body a{text-decoration:underline}
+.cmsg-body pre{white-space:pre-wrap;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 9px;font-size:12px;margin:4px 0;overflow-x:auto}
+.cmsg-body code{background:var(--accent-soft);border-radius:4px;padding:0 4px;font-size:12.5px}
+.cmsg.user .cmsg-body code{background:rgba(255,255,255,.22)}
+.chat-hint{color:var(--muted);font-size:12.5px;line-height:1.6;padding:10px 8px;text-align:center;margin:auto 0}
+.chat-dots{display:inline-block;color:var(--muted);letter-spacing:2px;animation:chatpulse 1.1s ease-in-out infinite}
+@keyframes chatpulse{0%,100%{opacity:.25}50%{opacity:.9}}
+.chat-in{display:flex;gap:7px;padding:9px 10px calc(9px + env(safe-area-inset-bottom));border-top:1px solid var(--line);align-items:flex-end;flex:0 0 auto}
+.chat-in textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:9px;background:var(--bg);color:var(--ink);font:inherit;font-size:13.5px;line-height:1.45;padding:7px 10px;min-height:34px;max-height:120px;outline:none}
+.chat-in textarea:focus{border-color:var(--accent)}
+#chatsend{height:34px;min-width:40px;justify-content:center}
 
 /* ===================== MOBILE / TOUCH ===================== */
 /* Two independent axes:
@@ -596,8 +625,12 @@ header.top{position:sticky;top:0;z-index:30;backdrop-filter:saturate(180%) blur(
   .placedetail{left:8px;right:8px;width:auto;top:auto;bottom:8px;height:auto;max-height:62%;min-height:0}
   body.mapopen{overflow:hidden}
   .fab.show{display:flex}
-  body:has(.editing-item) .fab{display:none}   /* don't cover the editor's bottom fields while typing */
+  body:has(.editing-item) .fab,body:has(.editing-item) #chatfab{display:none}   /* don't cover the editor's bottom fields while typing */
   .toast{z-index:110;bottom:calc(84px + env(safe-area-inset-bottom));max-width:92vw}
+  /* 💬 chat: the FAB rides above the 🗺 map FAB; the panel becomes a full-width bottom sheet */
+  body:has(#mapfab.show) #chatfab{bottom:calc(82px + env(safe-area-inset-bottom))}
+  .chatpanel{left:0;right:0;bottom:0;width:auto;max-width:none;height:88vh;height:88dvh;border-radius:16px 16px 0 0;border-left:0;border-right:0;border-bottom:0}
+  .chat-in textarea{font-size:16px}
 }
 </style>
 </head>
@@ -612,6 +645,21 @@ header.top{position:sticky;top:0;z-index:30;backdrop-filter:saturate(180%) blur(
 <main class="wrap-main" id="app"></main>
 <div class="toast" id="toast"></div>
 <button id="mapfab" class="fab" onclick="toggleMapSheet()" aria-label="Toggle map">🗺</button>
+<button id="chatfab" onclick="toggleChat()" aria-label="Chat about this trip" title="Chat about this trip">💬</button>
+<div id="chatpanel" class="chatpanel" role="dialog" aria-label="Trip chat">
+  <div class="chat-hdr">
+    <span class="chat-ttl">💬 Trip chat</span>
+    <select id="chatmodel" class="chat-sel" title="Model"></select>
+    <select id="chateffort" class="chat-sel" title="Reasoning effort"></select>
+    <button class="iconbtn" title="Clear this trip's chat history" onclick="chatClear()">🗑</button>
+    <button class="iconbtn" title="Close" onclick="closeChat()">✕</button>
+  </div>
+  <div class="chat-msgs" id="chatmsgs"></div>
+  <div class="chat-in">
+    <textarea id="chatinput" rows="1" placeholder="Ask about this trip…" onkeydown="chatInputKey(event)" oninput="autoGrow(this)"></textarea>
+    <button class="btn primary sm" id="chatsend" onclick="chatSendOrStop()" title="Send">➤</button>
+  </div>
+</div>
 
 <script src="https://unpkg.com/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -655,7 +703,8 @@ const api={
 /* ---------- map engine (Google when a key is set, else Leaflet fallback) ---------- */
 let GKEY=undefined, PDFOK=false, _gp=null;   // PDFOK = server can render a PDF (headless Chrome on the Mac) → touch clients export via GET /api/pdf
 async function getKey(){
-  if(GKEY===undefined){try{const c=(await fetch("/api/config").then(r=>r.json()))||{};GKEY=c.googleMapsApiKey||"";PDFOK=!!c.pdfEngine;}catch(e){GKEY="";}}
+  if(GKEY===undefined){try{const c=(await fetch("/api/config").then(r=>r.json()))||{};GKEY=c.googleMapsApiKey||"";PDFOK=!!c.pdfEngine;CHATOK=!!c.chatOk;CHATDEFMODEL=c.claudeModel||"";}catch(e){GKEY="";}
+    updateChatFab();}   // the 💬 FAB may become showable once we know the claude CLI exists
   return GKEY;
 }
 function ensureGoogle(){
@@ -1108,7 +1157,8 @@ function toggleMapSheet(){document.body.classList.contains("mapopen")?closeMapSh
 function updateFab(){const f=document.getElementById("mapfab");if(!f)return;
   const show=/^#\/trip\//.test(location.hash)&&CUR&&CUR.structured&&SHOWMAP&&TRIPTAB!=="docs";
   f.classList.toggle("show",!!show);
-  f.textContent=document.body.classList.contains("mapopen")?"✕":"🗺";}
+  f.textContent=document.body.classList.contains("mapopen")?"✕":"🗺";
+  updateChatFab();}   // the 💬 chat FAB tracks the same navigation events (route/drawTrip/sheet toggles)
 /* bottom action sheet — the touch replacement for every hover-revealed control */
 let _sheetEls=null;
 function closeSheet(){if(!_sheetEls)return;const els=_sheetEls;_sheetEls=null;
@@ -1202,6 +1252,179 @@ function tripSheet(){                      // the header ⋯ (phone folds PDF/ca
     {ic:"🗑",label:"Delete trip",danger:true,fn:deleteTrip},
   ]);
 }
+/* ---------- 💬 trip chat: discuss the OPEN trip with claude (bottom-right FAB → panel) ----------
+   POST /api/chat streams NDJSON {delta} chunks from the local claude CLI; the panel's model/effort
+   selects ride along on every message (persisted globally in localStorage as chatModel/chatEffort).
+   The trip context (chatCtx) is REBUILT on each send — itinerary + stays + climate cards + any per-day
+   forecast + docs list (+ raw text for unstructured trips) — so mid-chat edits are always reflected.
+   History is per-trip in localStorage (tripchat:<id>); read-only advisor: chat never mutates the trip. */
+let CHATOK=false, CHATDEFMODEL="", CHATBUSY=false, CHATABORT=null, _chatHist=null, _chatFor=null;
+const CHAT_MODELS=[["","Default"],["claude-fable-5","Fable 5"],["claude-opus-4-8","Opus 4.8"],["claude-sonnet-5","Sonnet 5"],["claude-haiku-4-5-20251001","Haiku 4.5"]];
+const CHAT_EFFORT_OPTS=[["","Default effort"],["low","Low effort"],["medium","Medium effort"],["high","High effort"],["max","Max effort"]];
+function chatPref(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}
+function setChatPref(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+function chatFillSelects(){
+  const m=$("#chatmodel"),e=$("#chateffort");if(!m||!e||m.options.length)return;   // build once
+  const short=(CHATDEFMODEL||"").replace(/^claude-/,"").replace(/-\d{8}$/,"");
+  CHAT_MODELS.forEach(([v,l])=>{const o=document.createElement("option");o.value=v;o.textContent=v?l:("Default"+(short?` (${short})`:""));m.appendChild(o);});
+  CHAT_EFFORT_OPTS.forEach(([v,l])=>{const o=document.createElement("option");o.value=v;o.textContent=l;e.appendChild(o);});
+  m.value=chatPref("chatModel");if(m.selectedIndex<0)m.value="";
+  e.value=chatPref("chatEffort");if(e.selectedIndex<0)e.value="";
+  m.onchange=()=>setChatPref("chatModel",m.value);
+  e.onchange=()=>setChatPref("chatEffort",e.value);
+}
+function chatKeyFor(id){return "tripchat:"+id;}
+function chatHist(){                             // the OPEN trip's history (lazy-loaded; reloads on trip switch)
+  const id=CUR&&CUR.id;if(!id)return [];
+  if(_chatFor!==id||!_chatHist){
+    if(CHATABORT){try{CHATABORT.abort();}catch(e){}}   // switching trips kills any in-flight stream
+    _chatFor=id;
+    try{_chatHist=JSON.parse(localStorage.getItem(chatKeyFor(id))||"[]")||[];}catch(e){_chatHist=[];}
+    if(!Array.isArray(_chatHist))_chatHist=[];
+  }
+  return _chatHist;
+}
+function saveChatHist(id,h){                     // cap: last 40 messages, 20k chars each — plenty for a trip discussion
+  try{localStorage.setItem(chatKeyFor(id),JSON.stringify(h.slice(-40).map(m=>({role:m.role,content:String(m.content).slice(0,20000),err:m.err||undefined}))));}catch(e){}
+}
+function updateChatFab(){
+  const f=document.getElementById("chatfab");if(!f)return;
+  const show=!PRINTMODE&&CHATOK&&/^#\/trip\//.test(location.hash)&&!!CUR;   // any open trip — an unstructured one chats over its raw text
+  f.classList.toggle("show",!!show);
+  if(!show&&document.body.classList.contains("chatopen"))closeChat();
+  else if(show&&document.body.classList.contains("chatopen")&&CUR&&_chatFor!==CUR.id)renderChatMsgs();   // panel left open across a trip switch → show the new trip's history
+  f.textContent=document.body.classList.contains("chatopen")?"✕":"💬";
+}
+function openChat(){
+  if(!CUR)return;
+  chatFillSelects();
+  document.body.classList.add("chatopen");
+  renderChatMsgs();updateChatFab();
+  if(!IS_TOUCH)setTimeout(()=>{const i=$("#chatinput");if(i)i.focus();},60);   // touch: don't pop the keyboard until the user taps the field
+}
+function closeChat(){document.body.classList.remove("chatopen");updateChatFab();}
+function toggleChat(){document.body.classList.contains("chatopen")?closeChat():openChat();}
+function chatClear(){
+  const id=CUR&&CUR.id;if(!id)return;
+  if(CHATABORT){try{CHATABORT.abort();}catch(e){}}
+  _chatHist=[];_chatFor=id;saveChatHist(id,[]);renderChatMsgs();
+}
+function chatMd(s){                              // minimal markdown for assistant bubbles — escape FIRST, never raw HTML
+  let h=esc(String(s==null?"":s));
+  h=h.replace(/```[a-zA-Z0-9_-]*\n?([\s\S]*?)```/g,(m,c)=>`<pre>${c.replace(/\n+$/,"")}</pre>`);
+  h=h.replace(/`([^`\n]+)`/g,"<code>$1</code>");
+  h=h.replace(/\*\*([^*\n][^*]*?)\*\*/g,"<b>$1</b>");
+  h=h.replace(/^#{1,4}\s+(.+)$/gm,"<b>$1</b>");
+  h=h.replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  return h;                                      // newlines/bullets render via .cmsg-body{white-space:pre-wrap}
+}
+function renderChatMsgs(){
+  const box=$("#chatmsgs");if(!box)return;
+  const hist=chatHist();
+  let h=hist.length?hist.map(m=>`<div class="cmsg ${m.role==="user"?"user":"asst"}${m.err?" err":""}"><div class="cmsg-body">${m.role==="user"?esc(m.content):chatMd(m.content)}</div></div>`).join("")
+    :`<div class="chat-hint">Ask Claude anything about this trip — pacing, packing, food, what to book ahead.<br>Your itinerary, dates, weather and document list are attached automatically.</div>`;
+  if(CHATBUSY)h+=`<div class="cmsg asst" id="chatstream"><div class="cmsg-body"><span class="chat-dots">● ● ●</span></div></div>`;
+  box.innerHTML=h;box.scrollTop=box.scrollHeight;
+  const s=$("#chatsend");if(s){s.textContent=CHATBUSY?"■":"➤";s.title=CHATBUSY?"Stop":"Send";}
+}
+function paintChatStream(text){
+  const el=document.querySelector("#chatstream .cmsg-body");if(!el)return;
+  el.innerHTML=chatMd(text);
+  const box=$("#chatmsgs");if(box)box.scrollTop=box.scrollHeight;
+}
+function chatCtx(t){                             // the auto-attached trip context — everything travel-relevant the app knows
+  const L=[];
+  L.push("Today: "+todayISO());
+  const nd=(t.days||[]).length;
+  const stat=t.status==="cancelled"?"CANCELLED":((t.endDate||t.startDate||"")>=todayISO()?"upcoming":"past");
+  L.push(`Trip: ${t.title||t.id} — ${t.startDate||"?"} → ${t.endDate||"?"} (${nd} day${nd===1?"":"s"}, ${stat})${t.timezone?" · tz "+t.timezone:""}`);
+  const cards=(_wxSumCards&&_wxSumCards.length?_wxSumCards:((t.climate||{}).cards||[]));   // live cards first (fillWeather), else the stored ones
+  if(cards.length){
+    L.push("","Typical weather (~10-yr averages for these exact dates):");
+    cards.forEach(c=>{const cl=c.climate||{};if(cl.tmax==null)return;
+      const ds=c.dates||[];const when=ds.length?` ${ds[0]}${ds.length>1?"→"+ds[ds.length-1]:""}`:"";
+      L.push(`- ${c.label||"?"}${when}: ${Math.round(cl.tmin)}–${Math.round(cl.tmax)}°C, ~${Math.round(cl.precipDays)} rainy of ${cl.windowDays} days (${climateDesc(cl)})`);});
+  }
+  const dset=new Set((t.days||[]).map(d=>(d.date||"").slice(0,10)));
+  const fx=Object.values(_dayWxData||{}).filter(d=>d&&d.tmax!=null&&dset.has(d.date));      // per-day forecast/actuals, if fillWeather fetched any for THIS trip
+  if(fx.length){
+    L.push("","Per-day forecast/actuals:");
+    fx.sort((a,b)=>(a.date<b.date?-1:1)).forEach(d=>L.push(`- ${d.date}${d.loc?" ("+d.loc+")":""}: ${wmo(d.code).t||"—"}, ${Math.round(d.tmin)}–${Math.round(d.tmax)}°C${d.pop!=null?`, rain ${Math.round(d.pop)}%`:""}${d.sunrise?`, sun ${d.sunrise}–${d.sunset||""}`:""}`));
+  }
+  L.push("","Itinerary:");
+  (t.days||[]).forEach((d,i)=>{
+    const bits=[`Day ${i+1} — ${(d.date||"").slice(0,10)||"undated"}${weekday(d.date)?" "+weekday(d.date):""}`];
+    if(d.mark)bits.push(`[${d.mark==="pto"?"PTO":"holiday"}]`);
+    const lbl=(d.label||"").trim();
+    if(lbl&&!/^day\s*\d+$/i.test(lbl)&&!/^\d{1,2}\s*[/.\-]\s*\d{1,2}/.test(lbl))bits.push(`“${lbl}”`);
+    L.push(bits.join(" "));
+    (d.items||[]).forEach(it=>{
+      const tx=String(it.text||"").replace(/\s+/g," ").trim().slice(0,300);
+      const nt=String(it.notes||"").replace(/\s+/g," ").trim().slice(0,200);
+      L.push(`  - [${it.type||"item"}]${it.time?" "+it.time:""} ${tx}${it.mode?` (by ${it.mode})`:""}${nt?` — note: ${nt}`:""}`);
+    });
+    if(stayText(d))L.push(`  - [stay] night at: ${stayText(d).replace(/\s+/g," ").trim()}`);
+    if(!(d.items||[]).length&&!stayText(d))L.push("  (empty day)");
+  });
+  const notes=Array.isArray(t.notes)?t.notes.filter(n=>n&&String(n).trim()):[];
+  if(notes.length)L.push("","Trip notes: "+notes.map(n=>String(n).trim()).join(" · ").slice(0,1000));
+  const docs=t.documents||[];
+  if(docs.length)L.push("","Documents on file (names only): "+docs.slice(0,50).map(d=>d.name+(d.category&&d.category!=="Other"?` (${d.category})`:"")).join(" · "));
+  if(!t.structured&&t.rawText)L.push("","Imported raw itinerary text (this trip isn't structured yet):",String(t.rawText).slice(0,6000));
+  let out=L.join("\n");
+  if(out.length>50000)out=out.slice(0,50000)+"\n…(truncated)";
+  return out;
+}
+function chatInputKey(e){
+  if(e.key==="Escape"){e.preventDefault();closeChat();return;}
+  if(e.key==="Enter"&&!e.shiftKey&&!IS_TOUCH){e.preventDefault();chatSend();}   // touch: Enter = newline; send via ➤
+}
+function chatSendOrStop(){if(CHATBUSY){if(CHATABORT)CHATABORT.abort();return;}chatSend();}
+async function chatSend(){
+  if(CHATBUSY||!CUR)return;
+  const ta=$("#chatinput"),q=((ta&&ta.value)||"").trim();
+  if(!q)return;
+  ta.value="";autoGrow(ta);
+  const hist=chatHist();
+  hist.push({role:"user",content:q});
+  saveChatHist(CUR.id,hist);
+  await chatRun(hist);
+}
+async function chatRun(hist){
+  const forId=CUR.id;
+  CHATBUSY=true;renderChatMsgs();
+  const ctrl=new AbortController();CHATABORT=ctrl;
+  let acc="",err=null;
+  try{
+    const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},signal:ctrl.signal,
+      body:JSON.stringify({id:forId,model:chatPref("chatModel"),effort:chatPref("chatEffort"),
+        context:chatCtx(CUR),messages:hist.filter(m=>!m.err).slice(-30).map(m=>({role:m.role,content:m.content}))})});
+    if(!res.ok){let j=null;try{j=await res.json();}catch(e){}err=(j&&j.error)||("HTTP "+res.status);}
+    else{
+      const rd=res.body.getReader(),dec=new TextDecoder();let buf="";
+      for(;;){
+        const {done,value}=await rd.read();if(done)break;
+        buf+=dec.decode(value,{stream:true});
+        let i;while((i=buf.indexOf("\n"))>=0){
+          const line=buf.slice(0,i).trim();buf=buf.slice(i+1);
+          if(!line)continue;
+          let ev=null;try{ev=JSON.parse(line);}catch(e){continue;}
+          if(ev.delta){acc+=ev.delta;paintChatStream(acc);}
+          else if(ev.error)err=ev.error;
+        }
+      }
+    }
+  }catch(e){
+    if(e&&e.name==="AbortError"){if(!acc)err="Stopped.";}   // stopped mid-stream: keep any partial answer
+    else err=String((e&&e.message)||e);
+  }
+  CHATBUSY=false;CHATABORT=null;
+  if(acc)hist.push({role:"assistant",content:acc});
+  if(err)hist.push({role:"assistant",content:"⚠ "+err,err:true});   // err entries render red and are NOT resent to claude
+  saveChatHist(forId,hist);
+  if(CUR&&CUR.id===forId)renderChatMsgs();
+}
+
 function drawTrip(){
   headerControls();
   const t=CUR;

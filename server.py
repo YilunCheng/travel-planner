@@ -15,7 +15,7 @@ all writes land under data/.
   python3 server.py        # -> http://localhost:8787
 """
 
-import json, os, sys, re, time, subprocess, mimetypes, tempfile, ipaddress, shutil, signal, urllib.request, urllib.error
+import json, os, sys, re, time, subprocess, mimetypes, tempfile, ipaddress, shutil, signal, threading, urllib.request, urllib.error
 import datetime as _dt
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, quote
@@ -504,6 +504,68 @@ def _wx_summary_prompt(trip, cards=None):
     )
 
 
+# ---- trip chat (💬 panel in the UI): streams the local `claude` CLI over NDJSON ----
+# The SECOND view-time LLM surface (the first is the ✨ weather summary above). Conversational, so
+# nothing is cached; the client sends the trip context + transcript on every message (stateless).
+def claude_available():
+    """True if the local `claude` CLI can actually be launched (CLAUDE_BIN resolves to a real binary)."""
+    try:
+        return bool(CLAUDE_BIN) and (os.path.isfile(CLAUDE_BIN) or bool(shutil.which(CLAUDE_BIN)))
+    except Exception:
+        return False
+
+
+CHAT_EFFORTS = ("low", "medium", "high", "max")
+# The chat must never run tools — it's a pure Q&A over the prompt. Deny every built-in (incl. the
+# read tools: with default permission-mode the rest would be denied anyway, but Read/Glob/Grep are
+# auto-allowed and this Mac's files are none of the chat's business), plus the harness/session tools
+# the CLI exposes in -p mode. --strict-mcp-config (with no --mcp-config) also drops any user MCP servers.
+CHAT_DENY_TOOLS = ",".join((
+    "Bash", "Edit", "Write", "NotebookEdit", "Read", "Glob", "Grep", "WebFetch", "WebSearch",
+    "Task", "Agent", "Skill", "Workflow", "TodoWrite", "ToolSearch", "ReportFindings",
+    "TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskOutput", "TaskStop",
+    "CronCreate", "CronDelete", "CronList", "SendMessage", "Monitor", "PushNotification",
+    "RemoteTrigger", "ScheduleWakeup", "EnterWorktree", "ExitWorktree", "DesignSync",
+))
+CHAT_PREAMBLE = (
+    "You are the built-in travel assistant of a personal trip-planner app, chatting with the trip's "
+    "owner about ONE specific trip. The trip's current data — day-by-day itinerary (times, transport, "
+    "hotels), typical weather for the dates, any per-day forecast, and the documents on file — is "
+    "auto-attached below and refreshed on every message.\n"
+    "Guidelines:\n"
+    "- Reply in the language the user writes in (中文 → 中文).\n"
+    "- Ground answers in the trip data (exact dates, places, season, the weather shown) plus practical "
+    "real-world knowledge: pacing, opening days, transit realism, what to book ahead, local specifics.\n"
+    "- Be concrete and concise; short paragraphs or compact lists. Markdown is fine (bold, bullets).\n"
+    "- You are READ-ONLY: you cannot edit the trip. When suggesting a change, describe exactly what to "
+    "add/move/remove so the user can do it in the app themselves.\n"
+    "- Answer directly — never use tools.\n"
+)
+
+
+def _chat_prompt(body, trip):
+    """One self-contained prompt per message: preamble + the client-built trip context + the transcript.
+    Stateless by design (no CLI session to manage); the context is rebuilt by the client each message, so
+    mid-chat itinerary edits are always reflected."""
+    context = str(body.get("context") or "").strip()[:60000]
+    if not context:   # client didn't build one (shouldn't happen) — fall back to a bare-bones server dump
+        context = json.dumps({k: trip.get(k) for k in ("title", "startDate", "endDate", "days")},
+                             ensure_ascii=False)[:20000]
+    parts = [CHAT_PREAMBLE,
+             "=== TRIP DATA (auto-extracted from the app) ===", context,
+             "", "=== CONVERSATION ==="]
+    msgs = body.get("messages") or []
+    for m in msgs[-30:]:
+        if not isinstance(m, dict):
+            continue
+        role = "User" if m.get("role") == "user" else "Assistant"
+        text = str(m.get("content") or "").strip()[:8000]
+        if text:
+            parts.append(role + ": " + text)
+    parts.append("Assistant:")
+    return "\n".join(parts)
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **k):
         super().__init__(*a, directory=C.APP_DIR, **k)
@@ -576,7 +638,9 @@ class Handler(SimpleHTTPRequestHandler):
             cfg = C.read_json(CONFIG_PATH, {}) or {}
             return self._json(200, {"googleMapsApiKey": cfg.get("googleMapsApiKey", ""),
                                     "hasFlightKey": bool((cfg.get("aeroDataBoxKey") or "").strip()),
-                                    "pdfEngine": bool(chrome_bin())})   # server-side PDF available (touch clients use GET /api/pdf)
+                                    "pdfEngine": bool(chrome_bin()),   # server-side PDF available (touch clients use GET /api/pdf)
+                                    "chatOk": claude_available(),      # 💬 trip chat possible (local claude CLI found)
+                                    "claudeModel": C.CLAUDE_MODEL})    # → the chat model picker's "Default" label
         if route == "/api/pdf":
             return self.get_pdf(parse_qs(p.query))
         if route == "/api/flight":
@@ -896,6 +960,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.geocode_city()
             if route == "/api/weather/summary":
                 return self.weather_summary()
+            if route == "/api/chat":
+                return self.chat()
             if route == "/api/cover":
                 return self.upload_cover()
             if route == "/api/cover/auto":
@@ -1164,6 +1230,122 @@ class Handler(SimpleHTTPRequestHandler):
         cache[tid] = {"sig": sig, "text": text}
         C.write_json(WX_SUMMARY_CACHE, cache)
         return self._json(200, {"ok": True, "text": text})
+
+    def chat(self):
+        """POST /api/chat {id, messages:[{role,content}…], model?, effort?, context?} → an NDJSON stream:
+        {"delta":"…"} text chunks as claude produces them, then {"done":true} (or {"error":"…"}).
+
+        Shells the local `claude` CLI (`--output-format stream-json --include-partial-messages`) with the
+        model/effort the user picked in the chat panel. Unlike the import pipeline this runs WITHOUT
+        bypassPermissions, with every tool disallowed, and from an empty scratch cwd — pure text Q&A.
+        Stateless & uncached (conversational); the client resends context + transcript each message.
+        The response streams with `Connection: close` (no Content-Length); if the client disconnects
+        (stop button / closed tab) the write raises and the CLI process group is killed."""
+        b = self._body()
+        tid = (b.get("id") or "").strip()
+        if not C.is_safe_trip_id(tid):
+            return self._json(400, {"error": "bad id"})
+        trip = C.load_trip(tid)
+        if not trip:
+            return self._json(404, {"error": "no such trip"})
+        if not isinstance(b.get("messages"), list) or not b["messages"]:
+            return self._json(400, {"error": "missing messages"})
+        if not claude_available():
+            return self._json(200, {"error": "claude CLI not found on this Mac — chat needs Claude Code installed"})
+        model = (b.get("model") or "").strip()
+        if not re.match(r"^[A-Za-z0-9._-]{1,64}$", model):
+            model = ""                                       # unset/garbage -> the server default
+        effort = (b.get("effort") or "").strip().lower()
+        prompt = _chat_prompt(b, trip)
+
+        args = [CLAUDE_BIN, "-p", "--output-format", "stream-json", "--include-partial-messages",
+                "--verbose", "--model", model or C.CLAUDE_MODEL,
+                "--disallowedTools", CHAT_DENY_TOOLS, "--strict-mcp-config", "--max-turns", "4"]
+        if effort in CHAT_EFFORTS:
+            args += ["--effort", effort]
+        env = dict(os.environ)
+        env["PATH"] = C.TOOL_PATH
+        cwd = os.path.join(C.CACHE_DIR, "chatwd")            # empty scratch cwd: no project files in reach
+        os.makedirs(cwd, exist_ok=True)
+        proc = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,    # non-JSON lines (CLI errors) fold into errbuf below
+                                cwd=cwd, env=env, start_new_session=True)
+
+        def _kill():
+            if proc.poll() is None:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)      # whole tree (the CLI spawns node helpers)
+                except Exception:
+                    proc.kill()
+
+        def _feed():                                         # write the prompt off-thread (a large prompt could fill the pipe)
+            try:
+                proc.stdin.write(prompt.encode("utf-8"))
+                proc.stdin.close()
+            except Exception:
+                pass
+
+        threading.Thread(target=_feed, daemon=True).start()
+        watchdog = threading.Timer(1500, _kill)              # hard cap — a hung CLI can't pin a thread forever
+        watchdog.daemon = True
+        watchdog.start()
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")              # stream until EOF — no Content-Length
+        self.end_headers()
+        self.close_connection = True
+
+        def send(obj):
+            self.wfile.write((json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8"))
+            self.wfile.flush()
+
+        sent, errbuf = False, []
+        try:
+            for raw in iter(proc.stdout.readline, b""):
+                line = raw.decode("utf-8", "replace").strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except Exception:
+                    errbuf.append(line)                      # stderr / non-JSON noise → error detail if nothing streams
+                    continue
+                t = ev.get("type")
+                if t == "stream_event":
+                    e = ev.get("event") or {}
+                    if e.get("type") == "content_block_delta":
+                        d = e.get("delta") or {}
+                        if d.get("type") == "text_delta" and d.get("text"):
+                            send({"delta": d["text"]})       # thinking_delta etc. deliberately not forwarded
+                            sent = True
+                elif t == "result":
+                    txt = (ev.get("result") or "").strip()
+                    if ev.get("is_error") and not sent:
+                        send({"error": (txt or "claude failed")[:400]})
+                        sent = True
+                    elif txt and not sent:                   # older CLI without partial messages → one final chunk
+                        send({"delta": txt})
+                        sent = True
+            try:
+                proc.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                _kill()
+            if not sent:
+                send({"error": ("\n".join(errbuf)[-400:] or "claude produced no output")})
+            else:
+                send({"done": True})
+        except (BrokenPipeError, ConnectionResetError, TimeoutError):
+            pass                                             # client went away (stop / closed tab) — just clean up
+        except Exception:
+            try:
+                send({"error": "stream failed"})
+            except Exception:
+                pass
+        finally:
+            watchdog.cancel()
+            _kill()
 
     def upload_cover(self):
         """Body = raw image bytes; ?id=<trip>. Convert+resize to data/covers/<id>.jpg."""
