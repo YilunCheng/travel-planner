@@ -279,6 +279,9 @@ header.top{position:sticky;top:0;z-index:30;backdrop-filter:saturate(180%) blur(
 .stay.xlink{outline:2px solid var(--accent);outline-offset:1px;border-radius:8px}
 .day.dsel{box-shadow:0 0 0 2px var(--accent),var(--shadow)}
 .leaflet-marker-icon.mk-hl{filter:drop-shadow(0 0 7px var(--accent));z-index:1000!important}
+.leaflet-marker-icon .daymrk.mk-preview{position:relative;z-index:1200!important}   /* transient "you searched/clicked here" preview pin (Leaflet) */
+.daymrk.mk-preview::after{content:"";position:absolute;inset:-3px;border-radius:inherit;pointer-events:none;animation:mkpreviewpulse 1.5s ease-out infinite}
+@keyframes mkpreviewpulse{0%{box-shadow:0 0 0 0 rgba(56,132,222,.55)}70%{box-shadow:0 0 0 13px rgba(56,132,222,0)}100%{box-shadow:0 0 0 0 rgba(56,132,222,0)}}
 /* sticky map column: map stays in view while the itinerary scrolls */
 .detail.hasmap{grid-template-columns:minmax(0,1fr) clamp(400px,48vw,720px)}
 .detail.pdfmeasure{display:block}                                  /* momentary: measure the itinerary at PRINT width (map hidden) to size a single pageless PDF page */
@@ -1600,6 +1603,7 @@ function initTripMap(){
   if(!slot)return;   // build even with 0 places — an empty map still hosts search + click-to-add
   const id=CUR.id, cached=tripMapCache.get(id);
   if(cached){                                   // reuse — no new map load
+    tmClearPin(cached);                         // a redraw recreates the detail card closed → drop any stray transient preview pin with it
     slot.appendChild(cached.host);
     tripMapCache.delete(id);tripMapCache.set(id,cached);   // mark most-recently-used
     const keep=id===_lastMapId;   // same-trip redraw → keep the current view; re-frame only when (re)opening or switching trips
@@ -2093,6 +2097,28 @@ function zoomToPlace(c,ll){           // center + zoom on a clicked place, nudgi
     else gSmoothZoom(c.map,z,{lat:ll[0],lng:ll[1]},off);
   }catch(_){}
 }
+function previewIcon(glyph,color){    // enlarged, pulsing version of placeIcon — the transient search/click preview pin (Leaflet)
+  return L.divIcon({className:"",html:`<div class="daymrk mk-preview" style="background:${color};width:31px;height:31px;font-size:16px"><span>${glyph||"📍"}</span></div>`,
+    iconSize:[31,31],iconAnchor:[15,28],popupAnchor:[0,-26]});
+}
+function tmDropPin(c,ll,kind){        // drop a TRANSIENT preview marker at a searched/POI-clicked place so its EXACT spot is obvious — such a place isn't in the itinerary yet, so it has no real pin of its own
+  if(!c||!ll||ll[0]==null||ll[1]==null)return;
+  tmClearPin(c);
+  const stl=placeStyle(kind||"other");
+  try{
+    if(c.engine==="leaflet"){
+      c._pin=L.marker(ll,{icon:previewIcon(stl.glyph,stl.color),zIndexOffset:12000,interactive:false,keyboard:false}).addTo(c.map);
+    }else{
+      c._pin=new google.maps.Marker({position:{lat:ll[0],lng:ll[1]},map:c.map,icon:gPin(stl.color,true),   // the bigger "pop" pin so the preview clearly outsizes the itinerary's own pins
+        zIndex:99999,label:{text:stl.glyph,fontSize:"16px"},animation:google.maps.Animation.DROP,clickable:false,title:"Search result"});
+    }
+  }catch(_){}
+}
+function tmClearPin(c){               // remove the transient preview pin (card closed / new pick / redraw)
+  if(!c||!c._pin)return;
+  try{if(c.engine==="leaflet")c.map.removeLayer(c._pin);else c._pin.setMap(null);}catch(_){}
+  c._pin=null;
+}
 function closePlacePopups(){          // ✕ on EITHER popup (marker bubble or detail card) closes BOTH — keeps the current view (no auto zoom-out)
   const c=tripMapCache.get(CUR&&CUR.id);
   if(c){if(c.iw)c.iw.close();else if(c.engine==="leaflet"&&c.map.closePopup)c.map.closePopup();}
@@ -2104,7 +2130,9 @@ async function showPlaceDetail(name,ll,addable,pid){   // rich Google place pane
   const q=encodeURIComponent(name),big="https://www.google.com/maps/search/?api=1&query="+q;
   const host=document.getElementById("placedetail");
   if(!host){window.open(big,"_blank","noopener");return;}   // map hidden / no pane -> just open Google Maps
-  {const c=tripMapCache.get(CUR&&CUR.id);clearRoute(c);tmApplyDayDim(c,SELDAY);}_routeState=null;   // leaving any route view
+  {const c=tripMapCache.get(CUR&&CUR.id);clearRoute(c);tmApplyDayDim(c,SELDAY);
+   if(c){if(addable&&ll)tmDropPin(c,ll,(PENDXP&&PENDXP.kind)||"");   // a searched / POI-clicked place has no pin yet → drop a transient one so the exact spot is visible
+         else tmClearPin(c);}}_routeState=null;   // (an existing itinerary place already has its own marker — no preview needed) · leaving any route view
   const key=await getKey();
   const foot=addable?pdAddFooter(name):"";
   const head=`<div class="pdhead">`
@@ -2150,7 +2178,7 @@ function pdEmbedFallback(name,ll,key){          // free Maps Embed card (used wh
   const q=encodeURIComponent(name);
   host.innerHTML=`<iframe class="pdframe" src="https://www.google.com/maps/embed/v1/place?key=${encodeURIComponent(key||"")}&q=${q}${ll?`&center=${ll[0]},${ll[1]}&zoom=15`:""}" loading="lazy" allowfullscreen></iframe>`;
 }
-function hidePlaceDetail(){const c=tripMapCache.get(CUR&&CUR.id);clearRoute(c);tmApplyDayDim(c,SELDAY);_routeState=null;const h=document.getElementById("placedetail");if(h){h.style.display="none";h.innerHTML="";}if(_gmKeyH){document.removeEventListener("keydown",_gmKeyH);_gmKeyH=null;}_pdToken++;}
+function hidePlaceDetail(){const c=tripMapCache.get(CUR&&CUR.id);clearRoute(c);tmClearPin(c);tmApplyDayDim(c,SELDAY);_routeState=null;const h=document.getElementById("placedetail");if(h){h.style.display="none";h.innerHTML="";}if(_gmKeyH){document.removeEventListener("keydown",_gmKeyH);_gmKeyH=null;}_pdToken++;}
 function tripClickItem(itemId){
   const c=tripMapCache.get(CUR&&CUR.id);if(!c||!c.itemIndex.has(itemId))return;
   openMapSheet();   // phone: tapping a located row slides the map sheet in on it (no-op on desktop)
