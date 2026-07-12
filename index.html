@@ -777,7 +777,7 @@ function gPin(color,big){   // small SVG balloon pin (Google), filled by place t
 function gMapOpts(extra){
   const dark=matchMedia("(prefers-color-scheme:dark)").matches;
   return Object.assign({mapTypeControl:true,streetViewControl:true,fullscreenControl:true,
-    gestureHandling:"greedy",isFractionalZoomEnabled:true,clickableIcons:false,   // clickableIcons:false → Google's own POIs never intercept a map click (click-to-add stays reliable)
+    gestureHandling:"greedy",isFractionalZoomEnabled:true,clickableIcons:false,   // default off (global map); the per-trip map overrides to true so clicking a Google POI opens our detail panel — see tripMapGoogle
     styles:(dark?GMAP_DARK:[]).concat(GMAP_DECLUTTER)},extra||{});   // fractional zoom → smooth rAF zoom-in on a raster map; DECLUTTER always applied so OUR pins are the only markers
 }
 const GMAP_DARK=[
@@ -1922,9 +1922,14 @@ function placePopupHTML(p){   // shared marker-popup body: lists EVERYTHING at t
 function tripMapGoogle(host,places,segs,maxd){
   const bid=CUR&&CUR.id;
   const c0=places[0]||{lat:20,lng:0};   // empty trip -> a broad default; the first search/click zooms in
-  const map=new google.maps.Map(host,gMapOpts({center:{lat:c0.lat,lng:c0.lng},zoom:places.length?6:2}));
+  const map=new google.maps.Map(host,gMapOpts({center:{lat:c0.lat,lng:c0.lng},zoom:places.length?6:2,clickableIcons:true}));   // clickableIcons:true → clicking a Google POI icon opens OUR rich detail panel (handled below)
   rememberView(bid,map,"google");   // keep this trip's live view known so a later rebuild can restore it
-  map.addListener("click",ev=>{if(ev&&ev.latLng)onTripMapClick(ev.latLng.lat(),ev.latLng.lng());});   // armed -> drop a place
+  map.addListener("click",ev=>{             // POI icon → its detail panel; empty map (or armed add-mode) → drop a place
+    if(!ev)return;
+    if(ev.placeId){if(ev.stop)ev.stop();    // a Google POI was clicked → suppress Google's default info window and show ours
+      if(!ADDPLACE){onTripMapPOIClick(ev.placeId,ev.latLng?[ev.latLng.lat(),ev.latLng.lng()]:null);return;}}
+    if(ev.latLng)onTripMapClick(ev.latLng.lat(),ev.latLng.lng());   // empty map (or armed add) → drop a place
+  });
   const bounds=new google.maps.LatLngBounds(),iw=new google.maps.InfoWindow({headerDisabled:true}),mk=[];   // headerDisabled → no Google header/close; we draw our own ✕ to match the detail panel
   places.slice().sort((a,b)=>(a.day||0)-(b.day||0)).forEach(p=>{
     const pos={lat:p.lat,lng:p.lng};if(!isAirportPlace(p))bounds.extend(pos);   // airports are transit — keep them out of the framing so a far one (JFK) doesn't blow up the zoom
@@ -2094,8 +2099,8 @@ function closePlacePopups(){          // ✕ on EITHER popup (marker bubble or d
   hidePlaceDetail();
 }
 let _gmKeyH=null,_pdToken=0;
-async function showPlaceDetail(name,ll,addable){   // rich Google place panel; addable=true appends an "Add to itinerary" footer (for a searched place not yet in the trip)
-  if(!name)return;
+async function showPlaceDetail(name,ll,addable,pid){   // rich Google place panel; addable=true appends an "Add to itinerary" footer; pid = a known Google place id (a POI-icon click) → skip the name→id lookup
+  if(!name&&!pid)return;
   const q=encodeURIComponent(name),big="https://www.google.com/maps/search/?api=1&query="+q;
   const host=document.getElementById("placedetail");
   if(!host){window.open(big,"_blank","noopener");return;}   // map hidden / no pane -> just open Google Maps
@@ -2111,24 +2116,29 @@ async function showPlaceDetail(name,ll,addable){   // rich Google place panel; a
   host.innerHTML=head+`<div class="pdbody" id="pdbody"><div class="gmload">Loading Google details…</div></div>`+foot;
   const tok=++_pdToken;
   try{
-    await richPlacePanel(name,ll,tok);
+    await richPlacePanel(name,ll,tok,pid);
   }catch(e){
     if(tok!==_pdToken)return;
     console.warn("Places UI Kit unavailable, using Embed card:",(e&&e.message)||e);
     pdEmbedFallback(name,ll,key);
   }
 }
-async function richPlacePanel(name,ll,tok){   // resolve name -> place_id, then render the full Places UI Kit detail panel
+async function richPlacePanel(name,ll,tok,knownId){   // render the Places UI Kit detail panel; knownId = a POI-click's place id (skips the name→id search)
   await ensureGoogle();
   const {Place}=await google.maps.importLibrary("places");
   if(!customElements.get("gmp-place-details"))throw new Error("uikit-undefined");
-  const req={textQuery:name,fields:["id"],maxResultCount:1,language:"en"};
-  if(ll)req.locationBias={center:{lat:ll[0],lng:ll[1]},radius:8000};
-  const {places}=await Place.searchByText(req);
+  let placeId=knownId;
+  if(!placeId){                                   // no id yet (a search/marker click) → resolve name → place_id first
+    const req={textQuery:name,fields:["id"],maxResultCount:1,language:"en"};
+    if(ll)req.locationBias={center:{lat:ll[0],lng:ll[1]},radius:8000};
+    const {places}=await Place.searchByText(req);
+    if(tok!==_pdToken)return;                       // a newer click superseded this one
+    if(!places||!places.length)throw new Error("no-match");
+    placeId=places[0].id;
+  }
   if(tok!==_pdToken)return;                       // a newer click superseded this one
-  if(!places||!places.length)throw new Error("no-match");
   const host=document.getElementById("pdbody");if(!host)return;
-  const pid=String(places[0].id).replace(/[^A-Za-z0-9_-]/g,"");   // place id MUST be present as an attribute before the element connects, else it renders "Place info couldn't load"
+  const pid=String(placeId).replace(/[^A-Za-z0-9_-]/g,"");   // place id MUST be present as an attribute before the element connects, else it renders "Place info couldn't load"
   host.innerHTML=`<gmp-place-details class="pdkit"><gmp-place-details-place-request place="${pid}"></gmp-place-details-place-request><gmp-place-all-content></gmp-place-all-content></gmp-place-details>`;
   const el=host.querySelector("gmp-place-details");let done=false;
   const fb=()=>{if(done||tok!==_pdToken)return;done=true;pdEmbedFallback(name,ll,GKEY);};   // if the rich panel never loads, drop to the Embed card instead of a stuck error
@@ -3741,6 +3751,24 @@ function onTripMapClick(lat,lng){
 async function reverseGeocode(lat,lng){
   try{const r=await fetch("/api/geocode/reverse",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({lat,lng})}).then(x=>x.json());
     return r&&r.ok?{label:r.label||"",kind:r.kind||""}:null;}catch(e){return null;}
+}
+async function onTripMapPOIClick(placeId,ll){       // a Google POI icon on the trip map was clicked → show its rich detail panel (+ an Add-to-itinerary footer), keyed off the POI's own place id
+  if(!placeId)return;
+  openMapSheet();                                   // phone: make sure the map/detail sheet is visible
+  const c=tripMapCache.get(CUR&&CUR.id);
+  if(c&&ll)zoomToPlace(c,ll);                        // immediate feedback: fly to the clicked POI while its details load
+  const tok=++_pdToken;                             // claim the detail panel now; a newer POI/place click supersedes this one
+  try{
+    await ensureGoogle();
+    const {Place}=await google.maps.importLibrary("places");
+    const place=new Place({id:placeId});
+    await place.fetchFields({fields:["displayName","location"]});   // name (for the header link + Add footer) + precise coords
+    if(tok!==_pdToken)return;                       // superseded while fetching
+    const name=place.displayName||"";
+    const at=ll||(place.location?[place.location.lat(),place.location.lng()]:null);
+    PENDXP={lat:at?at[0]:null,lng:at?at[1]:null,label:name,kind:""};   // so the Add-to-itinerary footer can add it, same as a searched place
+    showPlaceDetail(name,at,true,placeId);          // known place id → render directly, no name→id search
+  }catch(e){console.warn("POI detail failed:",(e&&e.message)||e);}
 }
 function defaultAddDay(){                  // the add-menus' default day: the last day you added to, else the focused day, else Day 1
   const n=(CUR.days||[]).length, ok=v=>(v!=null&&v>=1&&v<=n)?v:null;
