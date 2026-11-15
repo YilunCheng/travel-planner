@@ -287,11 +287,40 @@ header.top{position:sticky;top:0;z-index:30;backdrop-filter:saturate(180%) blur(
 .detail.pdfmeasure{display:block}                                  /* momentary: measure the itinerary at PRINT width (map hidden) to size a single pageless PDF page */
 .detail.pdfmeasure .aside{display:none}
 .detail.pdfmeasure .main{width:186mm;max-width:186mm}
-.detail.pdfmeasure .dayempty,.detail.pdfmeasure .dayins,.detail.pdfmeasure .wxcard{display:none}   /* hidden in print → don't count them toward the page height */
+.detail.pdfmeasure .dayempty,.detail.pdfmeasure .dayins,.detail.pdfmeasure .wxcard,.detail.pdfmeasure .tnotes{display:none}   /* hidden in print → don't count them toward the page height */
 .detail.pdfmeasure .day{margin:0 0 7px}   /* print ADDS this margin on top of .daylist's 4px gap — without it the measure runs ~7px/day short and the map/last day gets bounced to a page 2 */
 .mappane .tripmap{height:calc(100vh - 168px);min-height:340px;max-height:780px;margin:0}
 .maphead{display:flex;align-items:center;gap:10px;margin-bottom:9px;flex-wrap:wrap}
 .mapdaylbl{font-weight:700;font-size:14.5px}
+/* 📝 trip notes — a card at the top of the right column, above the map (phone: top of the itinerary column, see the ≤880px block) */
+.tnotes{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:7px 12px 9px}
+.aside .tnotes{margin-bottom:10px}
+.tnotes.tn-main{display:none;margin:0 0 4px}                     /* the itinerary-column copy is phone-only */
+.tn-hdr{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none;min-width:0}
+.tn-hdr-t{font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);flex:0 0 auto}
+.tn-peek{display:none;font-size:12.5px;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tn-collapsed .tn-peek{display:block}
+.tn-collapsed .wxc-chev{transform:rotate(0)}
+.tn-collapsed .tn-body{display:none}
+.tn-body{margin-top:5px}
+.tn-view{font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word;max-height:30vh;overflow:auto;cursor:text;border-radius:7px;padding:3px 6px;margin:0 -6px;overscroll-behavior:contain}
+.detail:not(.hasmap) .aside .tn-view{max-height:calc(100vh - 160px)}   /* no map under it → the notes may use the column */
+.tn-view:hover{background:color-mix(in srgb,var(--panel) 88%,var(--accent-soft))}
+.tn-view a{text-decoration:underline;word-break:break-all}
+.tn-view.tn-empty{color:var(--muted);font-style:italic}
+.tn-ta{display:block;width:100%;min-height:88px;max-height:45vh;font:inherit;font-size:13px;line-height:1.5;border:1px solid var(--accent);border-radius:7px;background:var(--panel);color:var(--ink);padding:3px 6px;resize:none;outline:none;overflow:auto}
+.tn-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:10.5px;color:var(--muted);margin-top:5px}
+.tn-done{padding:2px 10px;font-size:12px}
+.tn-edit{margin-left:auto;flex:0 0 auto;width:22px;height:20px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:13px;line-height:1;color:var(--muted);opacity:0;transition:opacity .12s}
+.tnotes:hover .tn-edit{opacity:.7}
+.tn-edit:hover{opacity:1;background:var(--line);color:var(--ink)}
+@media (width > 880px){   /* desktop: the right column is a fixed-height stack — notes on top, the map fills the rest, so the whole map stays in view while sticky */
+  .detail.hasmap .aside{display:flex;flex-direction:column;height:calc(100vh - 104px)}
+  .detail.hasmap .aside .tnotes{flex:0 0 auto}
+  .detail.hasmap .aside .mappane{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+  .detail.hasmap .mappane .maparea{flex:1 1 auto;min-height:260px;max-height:780px;display:flex;flex-direction:column}
+  .detail.hasmap .mappane .tripmap{flex:1 1 auto;height:auto;min-height:0;max-height:none}
+}
 .docpanel{margin-top:18px}
 .dhead.daysel{cursor:pointer;transition:background .12s}
 .dhead.daysel:hover{background:color-mix(in srgb,var(--accent) 9%,var(--panel))}
@@ -475,7 +504,7 @@ header.top{position:sticky;top:0;z-index:30;backdrop-filter:saturate(180%) blur(
   .detail, .detail.hasmap { display:block !important; }   /* also the NO-map shape (?print=1 renders with SHOWMAP off): a fragmented grid prints an extra blank page */
   .detail .main { width:100% !important; max-width:100% !important; }
   /* every edit affordance off */
-  .grip, .ctrls, .dctrls, .dayempty, .dayins, .staygeo, .markdot, .ie-form, .ie-toggle, .wxcard { display:none !important; }
+  .grip, .ctrls, .dctrls, .dayempty, .dayins, .staygeo, .markdot, .ie-form, .ie-toggle, .wxcard, .tnotes { display:none !important; }   /* trip notes are personal — not part of the itinerary PDF */
   .thead .sub-src { display:none; }                                      /* "Open original in Pages" link + its " · " separator */
   .thead h1 { font-size:21px; }
   .thead, .wxcard { break-after:avoid; }
@@ -576,6 +605,9 @@ body.chatopen .chatpanel{display:flex}
   .dayempty{padding-left:24px}            /* empty-day add; per-row insert (item / transport) lives in the row ⋯ sheet */
   .deadd{opacity:.6}                      /* no hover on touch → keep the empty-day ＋ visible/tappable */
   .dayins{display:none}                   /* insert-day lives in the day ⋯ sheet */
+  .tn-hdr{min-height:30px}                /* 📝 notes header = the collapse toggle → a finger-sized target */
+  .tn-edit{opacity:.7;width:34px;height:30px;font-size:16px}   /* no hover → the ✎ stays visible */
+  .tn-done{padding:6px 14px;font-size:14px}
 }
 
 @media (max-width:880px){
@@ -607,7 +639,11 @@ body.chatopen .chatpanel{display:flex}
   .day .dbody{padding:7px 10px 8px 7px}
   .daylist{gap:8px}
   /* editor: ≥16px inputs = no iOS focus-zoom; touch-sized buttons */
-  .ie-text,.ie-note,.ie-link,.ie-f,.ie-time,.typesel,.ie-movesel,.mapsearch{font-size:16px}
+  .ie-text,.ie-note,.ie-link,.ie-f,.ie-time,.typesel,.ie-movesel,.mapsearch,.tn-ta{font-size:16px}
+  /* 📝 notes: the map is a slide-up sheet here, so the notes card moves to the top of the itinerary column */
+  .aside .tnotes{display:none}
+  .tnotes.tn-main{display:block}
+  .tn-view{font-size:14.5px;max-height:40vh}
   .ie-time{width:78px}
   .ie-row{flex-wrap:wrap;row-gap:6px}
   .iconbtn{width:34px;height:32px;font-size:17px}
@@ -628,7 +664,7 @@ body.chatopen .chatpanel{display:flex}
   .placedetail{left:8px;right:8px;width:auto;top:auto;bottom:8px;height:auto;max-height:62%;min-height:0}
   body.mapopen{overflow:hidden}
   .fab.show{display:flex}
-  body:has(.editing-item) .fab,body:has(.editing-item) #chatfab{display:none}   /* don't cover the editor's bottom fields while typing */
+  body:has(.editing-item) .fab,body:has(.editing-item) #chatfab,body:has(.tn-main .tn-ta) .fab,body:has(.tn-main .tn-ta) #chatfab{display:none}   /* don't cover the editor's (or the 📝 notes editor's) bottom fields while typing */
   .toast{z-index:110;bottom:calc(84px + env(safe-area-inset-bottom));max-width:92vw}
   /* 💬 chat: the FAB rides above the 🗺 map FAB; the panel becomes a full-width bottom sheet */
   body:has(#mapfab.show) #chatfab{bottom:calc(82px + env(safe-area-inset-bottom))}
@@ -1038,7 +1074,7 @@ async function renderTrip(id,startEdit){   // startEdit kept for #/trip/<id>/edi
   if(ensureTrainStations(CUR)){tripMapCache.delete(CUR.id);scheduleSave();}    // derive a 🚆 pin for every train's located stations (from ends[].geo); rebuild if stale
   syncDateLabels();            // heal any "M/D" labels that drifted from their date (e.g. inserts made before this fix)
   SELDAY=null;                 // a freshly opened trip starts showing all days
-  EDITITEM=null;EDITLEGS=null;UNDO=[];REDO=[];_preEdit=null;
+  EDITITEM=null;EDITLEGS=null;UNDO=[];REDO=[];_preEdit=null;NOTESEDIT=null;_notesPre=null;
   ADDPLACE=false;PENDXP=null;MAPSEARCH=[];LOCITEM=null;LOCSTAY=null;LOCEND=null;LASTDAY=null;TRIPTAB='trip';   // a freshly opened trip starts on the Itinerary tab
   _lastMapId=null;   // a (re)opened trip frames its map (edits within it keep the view via _tripView)
   if(PRINTMODE)SHOWMAP=false;   // headless PDF render: skip the live (billed) map build — the PDF uses the static image
@@ -1400,8 +1436,8 @@ function chatCtx(t){                             // the auto-attached trip conte
     if(stayText(d))L.push(`  - [stay] night at: ${stayText(d).replace(/\s+/g," ").trim()}`);
     if(!(d.items||[]).length&&!stayText(d))L.push("  (empty day)");
   });
-  const notes=Array.isArray(t.notes)?t.notes.filter(n=>n&&String(n).trim()):[];
-  if(notes.length)L.push("","Trip notes: "+notes.map(n=>String(n).trim()).join(" · ").slice(0,1000));
+  const notes=tripNotes(t).trim();   // the 📝 Notes card (the user's own text, or the imported prose until first edited)
+  if(notes)L.push("","Trip notes (written by the user):",notes.length>4000?notes.slice(0,4000)+"…":notes);
   const docs=t.documents||[];
   if(docs.length)L.push("","Documents on file (names only): "+docs.slice(0,50).map(d=>d.name+(d.category&&d.category!=="Other"?` (${d.category})`:"")).join(" · "));
   if(!t.structured&&t.rawText)L.push("","Imported raw itinerary text (this trip isn't structured yet):",String(t.rawText).slice(0,6000));
@@ -1460,6 +1496,108 @@ async function chatRun(hist){
   if(CUR&&CUR.id===forId)renderChatMsgs();
 }
 
+/* ---------- 📝 trip notes: free-form notes per trip, in a card above the map ----------
+   trip.notesText (one string) is the user's own text. Until it's first edited, the card shows the prose
+   the .pages importer pulled from below the itinerary table (trip.notes[] — import data, never written
+   here). Click the text to edit (the caret lands where you clicked); it autosaves as you type (debounced
+   POST /api/trip) and the whole session is ONE undo step; click away / Esc / ⌘↩ finishes. URLs render as
+   links. Desktop: top of the right column (.aside) with the map filling the rest; phone: the map is a
+   slide-up sheet, so the card renders at the top of the itinerary column instead (CSS picks the copy). */
+let NOTESEDIT=null;    // which copy is being edited: "side" (right column) | "main" (phone, itinerary column) | null
+let _notesPre=null;    // trip snapshot at the start of the edit session → one undo entry when it ends
+let _notesRedraw=false;   // true while drawTrip swaps the DOM: Chrome blurs the focused textarea synchronously DURING removal (still connected) — that's not a "done"
+let NOTES_COLLAPSED=(()=>{try{return localStorage.getItem("notesCollapsed")==="1";}catch(e){return false;}})();
+function tripNotes(t){
+  if(!t)return "";
+  if(typeof t.notesText==="string")return t.notesText;
+  return (Array.isArray(t.notes)?t.notes:[])
+    .map(n=>String(n==null?"":n).replace(/\s*\n\s*/g," ").trim())   // a "\n" inside an imported paragraph is pandoc's 72-col soft wrap, not a real break
+    .filter(Boolean).join("\n")
+    .replace(/&(amp|lt|gt|quot|#39);/g,(m,e)=>({amp:"&",lt:"<",gt:">",quot:'"',"#39":"'"}[e]));   // the importer left pandoc's HTML entities in
+}
+function linkifyText(s){   // escape + turn bare http(s) URLs into links — the text is the user's own; never raw HTML
+  s=String(s==null?"":s);
+  const re=/\bhttps?:\/\/[^\s<>"'`\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]+/gi;   // a URL stops at CJK text/punctuation typed right after it
+  let out="",last=0,m;
+  while((m=re.exec(s))){
+    let u=m[0];
+    while(/[.,;:!?)\]}]$/.test(u)){   // trailing punctuation belongs to the sentence — except a ")" closing a "(" inside the URL (Wikipedia-style)
+      if(u.endsWith(")")&&u.split("(").length>u.split(")").length-1)break;
+      u=u.slice(0,-1);
+    }
+    out+=esc(s.slice(last,m.index))+`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`;
+    last=m.index+u.length;re.lastIndex=last;
+  }
+  return out+esc(s.slice(last));
+}
+function notesCard(where){
+  if(!CUR)return "";
+  const txt=tripNotes(CUR), has=!!txt.trim(), editing=NOTESEDIT===where;
+  const peek=(txt.split("\n").find(l=>l.trim())||"").trim();
+  const body=editing
+    ?`<textarea class="tn-ta" placeholder="Reminders, links, things to book, ideas…" oninput="notesInput(this)" onblur="notesBlur(this)" onkeydown="notesKey(event)">${esc(txt)}</textarea>`+
+     `<div class="tn-foot"><span>Saves as you type${IS_TOUCH?"":" · Esc to finish"}</span><button class="btn sm tn-done" onclick="notesDone()">Done</button></div>`
+    :`<div class="tn-view${has?"":" tn-empty"}" onclick="editTripNotes('${where}',event)" title="Click to edit">${has?linkifyText(txt):(IS_TOUCH?"Tap":"Click")+" to add notes for this trip — reminders, links, ideas…"}</div>`;
+  return `<div class="tnotes tn-${where}${NOTES_COLLAPSED&&!editing?" tn-collapsed":""}" data-where="${where}">`+
+    `<div class="tn-hdr" onclick="toggleNotesCollapse()" title="Show / hide notes"><span class="wxc-chev"></span><span class="tn-hdr-t">📝 Notes</span><span class="tn-peek">${esc(peek)}</span>`+
+    (editing?"":`<button class="tn-edit" onclick="event.stopPropagation();editTripNotes('${where}')" title="Edit notes" aria-label="Edit notes">✎</button>`)+   // explicit edit: a link-only note leaves little non-link text to click
+    `</div><div class="tn-body">${body}</div></div>`;
+}
+function notesDone(){const ta=document.querySelector(".tn-ta");if(ta)ta.blur();}   // the Done button — an explicit blur (iOS Safari doesn't move focus to a tapped button)
+function paintNotes(){document.querySelectorAll(".tnotes").forEach(el=>{el.outerHTML=notesCard(el.dataset.where);});}
+function notesScroll(){const o={};document.querySelectorAll(".tnotes").forEach(el=>{const b=el.querySelector(".tn-view,.tn-ta");if(b)o[el.dataset.where]=b.scrollTop;});return o;}   // per-copy scroll offset (view or editor)
+function notesRestoreScroll(o){if(!o)return;document.querySelectorAll(".tnotes").forEach(el=>{const b=el.querySelector(".tn-view,.tn-ta"),s=o[el.dataset.where];if(b&&s)b.scrollTop=s;});}   // same font/line-height/padding in both, so an offset carries across view ↔ editor
+function notesGrow(ta){const st=ta.scrollTop;ta.style.height="auto";ta.style.height=(ta.scrollHeight+2)+"px";ta.scrollTop=st;}   // CSS max-height caps it; past that the textarea scrolls
+function focusNotes(sel){   // sel = [start,end,scrollTop] to restore, or a caret offset, or nothing (→ end)
+  const ta=document.querySelector(`.tnotes[data-where="${NOTESEDIT}"] .tn-ta`);if(!ta)return;
+  notesGrow(ta);ta.focus();
+  const n=ta.value.length;
+  if(Array.isArray(sel)){ta.setSelectionRange(Math.min(sel[0],n),Math.min(sel[1],n));ta.scrollTop=sel[2]||0;}
+  else{const p=(typeof sel==="number")?Math.min(sel,n):n;ta.setSelectionRange(p,p);if(p>=n)ta.scrollTop=ta.scrollHeight;}   // setSelectionRange doesn't scroll to the caret — reveal the end (a mid-text click instead restores the view's scroll)
+}
+function notesCaretAt(view,ev){   // the text offset under the click: the view's textContent IS the raw text (links only wrap URLs), so it maps 1:1 to the textarea
+  try{
+    let node=null,off=0;
+    if(document.caretPositionFromPoint){const p=document.caretPositionFromPoint(ev.clientX,ev.clientY);if(p){node=p.offsetNode;off=p.offset;}}
+    else if(document.caretRangeFromPoint){const r=document.caretRangeFromPoint(ev.clientX,ev.clientY);if(r){node=r.startContainer;off=r.startOffset;}}
+    if(!node||!view.contains(node))return null;
+    const r=document.createRange();r.setStart(view,0);r.setEnd(node,off);
+    return r.toString().length;
+  }catch(e){return null;}
+}
+function editTripNotes(where,ev){
+  if(!CUR||PRINTMODE||NOTESEDIT)return;
+  if(ev&&ev.target.closest&&ev.target.closest("a"))return;          // a link in the notes just opens
+  const view=ev&&ev.currentTarget, sel=window.getSelection&&getSelection();
+  if(view&&sel&&!sel.isCollapsed&&view.contains(sel.anchorNode))return;   // drag-selecting text to copy isn't a click-to-edit
+  const caret=view?(view.classList.contains("tn-empty")?0:notesCaretAt(view,ev)):undefined;   // the ✎ button (no click point) → caret at the end
+  const sc=notesScroll();
+  _notesPre=snap();NOTESEDIT=where;
+  paintNotes();focusNotes(caret);
+  if(view)notesRestoreScroll(sc);   // clicked mid-way down long notes → the editor opens on the same lines (the ✎ path keeps the caret-at-end scroll)
+}
+function notesInput(ta){CUR.notesText=ta.value;notesGrow(ta);scheduleSave();}   // save as you type (debounced) — closing the tab mid-thought loses nothing
+function notesBlur(ta){
+  if(_notesRedraw||!ta.isConnected)return;   // the textarea is being swapped out by a redraw — drawTrip re-renders + refocuses the session; not a "done"
+  if(!document.hasFocus())return;   // the WINDOW lost focus (switched app/tab to copy a link…) — keep the session; the browser refocuses the textarea on return
+  const v=ta.value.replace(/\s+$/,"");   // drop trailing blank lines
+  if(typeof CUR.notesText==="string"||v!==tripNotes(CUR)){   // an untouched import seed stays a seed (opening the editor alone writes nothing)
+    if(CUR.notesText!==v){CUR.notesText=v;scheduleSave();}
+  }
+  if(_notesPre&&tripNotes(_notesPre)!==tripNotes(CUR))commitUndo(_notesPre);   // the whole edit session = one ⌘Z step
+  _notesPre=null;NOTESEDIT=null;
+  const sc=notesScroll();paintNotes();notesRestoreScroll(sc);   // Done near the bottom of long notes → the view stays there
+}
+function notesKey(e){
+  if(e.key==="Escape"||(e.key==="Enter"&&(e.metaKey||e.ctrlKey))){e.preventDefault();e.stopPropagation();e.target.blur();}   // Enter alone = newline
+}
+function toggleNotesCollapse(){
+  if(NOTESEDIT){const ta=document.querySelector(".tn-ta");if(ta)ta.blur();return;}   // header tap while editing = done (iOS keeps a textarea focused when you tap a plain div)
+  NOTES_COLLAPSED=!NOTES_COLLAPSED;
+  try{localStorage.setItem("notesCollapsed",NOTES_COLLAPSED?"1":"0");}catch(e){}
+  document.querySelectorAll(".tnotes").forEach(el=>el.classList.toggle("tn-collapsed",NOTES_COLLAPSED));
+}
+
 function drawTrip(){
   headerControls();
   const t=CUR;
@@ -1482,13 +1620,18 @@ function drawTrip(){
     wireDocDrop();
     return;
   }
+  const nta=document.querySelector(".tn-ta"), nsel=(NOTESEDIT&&nta&&document.activeElement===nta)?[nta.selectionStart,nta.selectionEnd,nta.scrollTop]:null;   // a redraw mid-notes-edit (e.g. a late airport-table load) must not drop the session or the caret
+  const nscroll=notesScroll();          // …and an itinerary edit must not snap long notes back to the top
   const noMap="";   // empty-state now lives inside the map panel itself (search box + click-to-add + generate-from-text hint)
-  const pane=tripMapPane(t);            // sticky map column (when geocoded)
+  const pane=tripMapPane(t);            // the map (when shown) — under the 📝 notes card in the sticky right column
   const wx=`<div id="wxcard" class="wxcard" style="display:none"></div>`;   // climate summary, filled async by fillWeather()
-  const left=`${head}${tabs}${noMap}${wx}${renderBody(t)}<img id="pdfmap" class="pdfmap" alt="Trip map">`;   // print-only static map at the BOTTOM of the PDF (src filled on Export PDF)
-  $("#app").innerHTML=`<div class="detail live ${pane?'hasmap':''}"><div class="main">${left}</div>${pane}</div>`;
+  const left=`${head}${tabs}${noMap}${notesCard("main")}${wx}${renderBody(t)}<img id="pdfmap" class="pdfmap" alt="Trip map">`;   // notesCard("main") = the phone copy (CSS shows it ≤880px); print-only static map at the BOTTOM of the PDF (src filled on Export PDF)
+  const html=`<div class="detail live ${pane?'hasmap':''}"><div class="main">${left}</div><aside class="aside">${notesCard("side")}${pane}</aside></div>`;   // the right column always exists now: notes on top, the map (if shown) below
+  _notesRedraw=!!nsel;try{$("#app").innerHTML=html;}finally{_notesRedraw=false;}
   if(!pane)closeMapSheet();   // phone: no map pane (hidden/unstructured) → never leave the body scroll-locked
   updateFab();
+  notesRestoreScroll(nscroll);
+  if(NOTESEDIT)focusNotes(nsel||undefined);
   initTripMap();wireTripHover();updateMapDayLabel();fillDriveLegs();
   wireSortables();fillWeather();
 }
@@ -1514,7 +1657,7 @@ function tripMapPane(t){
   const hint=!empty?"":hasItin
     ?`<div class="tripmap-hint">No places yet — type a place in the search box above, click anywhere on the map to drop one, or <button class="btn sm" onclick="geocodeTrip()">🗺 generate from your itinerary text</button></div>`
     :`<div class="tripmap-hint">No places yet — type a place in the search box above.</div>`;
-  return `<aside class="aside"><div class="mappane">
+  return `<div class="mappane">
     <div class="maphead">
       <input class="mapsearch" id="mapsearch" placeholder="🔍 Search a place to add…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" onfocus="mapSearchFocus(this)" onblur="mapSearchBlur()" onkeydown="mapSearchKey(event)" oninput="mapSearchInput(this)">
       <span class="mapdaylbl" id="mapdaylbl">All days</span>
@@ -1529,7 +1672,7 @@ function tripMapPane(t){
       ${hint}
     </div>
     <div class="maplegend" id="maplegend"></div>
-  </div></aside>`;
+  </div>`;   // drawTrip wraps it in the right-column <aside> under the notes card
 }
 function placeIcon(glyph,color){   // Leaflet fallback marker, coloured by place type with the type glyph
   return L.divIcon({className:"",html:`<div class="daymrk" style="background:${color}"><span>${glyph||"📍"}</span></div>`,
@@ -1996,6 +2139,7 @@ function tripMapLeaflet(host,places,segs,maxd){
   const fitPts=dest.length?dest:all;
   if(!applyMapView(map,"leaflet",bid)){if(fitPts.length)map.fitBounds(fitPts,{padding:[34,34],maxZoom:12});else map.setView([20,0],2);}   // restore the trip's live view on a same-trip rebuild; else frame (0 places → broad default)
   setTimeout(()=>map.invalidateSize(),120);
+  if(window.ResizeObserver)new ResizeObserver(()=>{if(host.isConnected&&host.clientHeight>0)map.invalidateSize();}).observe(host);   // the 📝 notes card above can grow / collapse → re-measure (Google tracks its container itself)
   return {map,bounds:all,mk,segLines,byPlace};
 }
 /* ----- day filter + two-way hover highlight (operate on the cached instance, no rebuild) ----- */
@@ -4356,7 +4500,7 @@ function scheduleSave(){
   const s=$("#savestate");if(s)s.textContent="saving…";
   clearTimeout(saveT);
   saveT=setTimeout(async()=>{
-    const saving=CUR;saving.structured=true;
+    const saving=CUR;if((saving.days||[]).length)saving.structured=true;   // arranging days promotes a raw-text trip to structured — a notes/title-only edit on a day-less one must not (that would hide it from structure.py --all-raw)
     try{
       const r=await api.save(saving);
       if(r&&r.sourceFolder&&CUR&&CUR.id===saving.id)CUR.sourceFolder=r.sourceFolder;   // server may have created/renamed this trip's Travel Plan folder
